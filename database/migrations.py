@@ -452,6 +452,56 @@ def migration_003_update_session_schema(cursor: sqlite3.Cursor) -> None:
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_id)")
 
 
+def migration_004_add_vote_boost_tables(cursor: sqlite3.Cursor) -> None:
+    """Add vote and boost tables for session engagement."""
+    
+    # Session votes table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS session_votes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            session_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(guild_id, session_id, user_id),
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        )
+    """)
+    
+    # Session boosts table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS session_boosts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            session_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        )
+    """)
+    
+    # Create indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_votes_session ON session_votes(session_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_votes_user ON session_votes(user_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_boosts_session ON session_boosts(session_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_boosts_user ON session_boosts(user_id)")
+
+
+def migration_004_rollback(cursor: sqlite3.Cursor) -> None:
+    """Rollback migration 004 - remove vote and boost tables."""
+    
+    # Drop indexes
+    cursor.execute("DROP INDEX IF EXISTS idx_boosts_user")
+    cursor.execute("DROP INDEX IF NOT EXISTS idx_boosts_session")
+    cursor.execute("DROP INDEX IF NOT EXISTS idx_votes_user")
+    cursor.execute("DROP INDEX IF NOT EXISTS idx_votes_session")
+    
+    # Drop tables
+    cursor.execute("DROP TABLE IF EXISTS session_boosts")
+    cursor.execute("DROP TABLE IF EXISTS session_votes")
+
+
 def migration_003_rollback(cursor: sqlite3.Cursor) -> None:
     """Rollback migration 003 - restore old session schema."""
     
@@ -535,6 +585,13 @@ def get_migration_runner(db: Database) -> MigrationRunner:
         name="update_session_schema",
         up=migration_003_update_session_schema,
         down=migration_003_rollback
+    ))
+    
+    runner.register(Migration(
+        version=4,
+        name="add_vote_boost_tables",
+        up=migration_004_add_vote_boost_tables,
+        down=migration_004_rollback
     ))
     
     return runner

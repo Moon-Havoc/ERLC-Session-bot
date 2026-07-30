@@ -53,6 +53,11 @@ The core framework architecture is complete and operational. The project provide
   - Session caching with automatic restoration
   - Background task for live duration updates
   - Graceful shutdown and cleanup
+  - Vote and boost methods with event publishing
+- **EventService**: Internal pub/sub event system
+  - Lightweight, no third-party dependencies
+  - Event listeners with priority support
+  - Events: session_started, session_ended, vote_added, boost_added
 - **StatsService**: Statistics tracking foundation
 - **APIService**: Optional external API integration with auto-disable
 
@@ -66,6 +71,8 @@ The core framework architecture is complete and operational. The project provide
   - `/session start <server_code> [notes]` - Start a new session
   - `/session end` - End the active session
   - `/session info` - Display active session information
+  - `/session vote` - Vote for the active session
+  - `/session boost [note]` - Boost the active session
 - **Stats Cog**: Structure ready for statistics commands
 - **Utility Cog**: General utility commands (ping, info, help, invite, website, avatar, server, user)
 
@@ -82,13 +89,14 @@ The core framework architecture is complete and operational. The project provide
 
 ## In Progress
 
-### 🚧 Session Management Core
+### 🚧 Voting and Boost System
 - **Status**: Core implementation complete
-- **Features**: Single active session per guild, session lifecycle management, background updates
-- **Commands**: `/session start`, `/session end`, `/session info`
-- **Validation**: Permission checks, channel verification, error handling
-- **Persistence**: Sessions survive bot restarts with automatic restoration
-- **Background Updates**: 60-second interval for duration and timestamp updates
+- **Features**: Event-driven architecture, vote/boost tracking, immediate embed updates
+- **Commands**: `/session vote`, `/session boost [note]`
+- **Event System**: Internal pub/sub for session_started, session_ended, vote_added, boost_added
+- **Database**: SessionVote and SessionBoost tables with proper constraints
+- **Permissions**: Available to all members who can view session channel
+- **Validation**: Duplicate vote prevention, multiple boosts allowed
 
 ## Not Started
 

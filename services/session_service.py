@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import asyncio
 
 from database import (
-    Session, SessionStatus,
-    SessionRepository, database
+    Session, SessionStatus, SessionVote, SessionBoost,
+    SessionRepository, SessionVoteRepository, SessionBoostRepository, database
 )
 from services.api_service import api_service
+from services.event_service import event_service, EVENT_SESSION_STARTED, EVENT_SESSION_ENDED, EVENT_VOTE_ADDED, EVENT_BOOST_ADDED
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,6 +23,8 @@ class SessionService:
     def __init__(self) -> None:
         """Initialize session service."""
         self.session_repository = SessionRepository(database)
+        self.vote_repository = SessionVoteRepository(database)
+        self.boost_repository = SessionBoostRepository(database)
         self._active_sessions: dict[int, Session] = {}  # guild_id -> session
         self._update_tasks: dict[int, asyncio.Task] = {}  # guild_id -> update task
         self._lock = asyncio.Lock()
@@ -72,6 +75,14 @@ class SessionService:
                     "server_code": created_session.server_code,
                     "status": created_session.status.value
                 })
+            
+            # Publish session_started event
+            await event_service.publish(EVENT_SESSION_STARTED, {
+                "session_id": created_session.id,
+                "guild_id": created_session.guild_id,
+                "host_id": created_session.host_id,
+                "server_code": created_session.server_code
+            })
             
             logger.info(f"Created session {created_session.id} for guild {guild_id}")
             return created_session
@@ -145,6 +156,14 @@ class SessionService:
                     "status": updated_session.status.value,
                     "duration": duration
                 })
+            
+            # Publish session_ended event
+            await event_service.publish(EVENT_SESSION_ENDED, {
+                "session_id": updated_session.id,
+                "guild_id": updated_session.guild_id,
+                "host_id": updated_session.host_id,
+                "duration": duration
+            })
             
             logger.info(f"Ended session {updated_session.id} for guild {guild_id}")
             return updated_session
@@ -300,6 +319,176 @@ class SessionService:
                     await task
                 except asyncio.CancelledError:
                     pass
+    
+    async def shutdown(self) -> None:
+        """Cleanup all background tasks."""
+        async with self._lock:
+            for guild_id, task in self._update_tasks.items():
+                task.cancel()
+            self._update_tasks.clear()
+        
+        # Wait for tasks to complete
+        await asyncio.sleep(0.1)
+    
+    # Voting and Boosting Methods
+    
+    async def vote(self, guild_id: int, user_id: int) -> Optional[Session]:
+        """Record a vote for the active session."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                logger.warning(f"No active session found for guild {guild_id}")
+                return None
+            
+            # Check if user already voted
+            existing_vote = await self.vote_repository.get_user_vote(session.id, user_id)
+            if existing_vote:
+                logger.info(f"User {user_id} already voted for session {session.id}")
+                return session
+            
+            # Create vote record
+            vote = SessionVote(
+                guild_id=guild_id,
+                session_id=session.id,
+                user_id=user_id
+            )
+            await self.vote_repository.create(vote)
+            
+            # Update session vote count
+            session.vote_count += 1
+            updated_session = await self.session_repository.update(session)
+            
+            # Update cache
+            async with self._lock:
+                self._active_sessions[guild_id] = updated_session
+            
+            # Publish vote_added event
+            await event_service.publish(EVENT_VOTE_ADDED, {
+                "session_id": session.id,
+                "guild_id": guild_id,
+                "user_id": user_id,
+                "vote_count": updated_session.vote_count
+            })
+            
+            logger.info(f"User {user_id} voted for session {session.id}")
+            return updated_session
+        except Exception as e:
+            logger.error(f"Error recording vote: {e}")
+            return None
+    
+    async def boost(self, guild_id: int, user_id: int, note: Optional[str] = None) -> Optional[Session]:
+        """Record a boost for the active session."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                logger.warning(f"No active session found for guild {guild_id}")
+                return None
+            
+            # Create boost record
+            boost = SessionBoost(
+                guild_id=guild_id,
+                session_id=session.id,
+                user_id=user_id,
+                note=note
+            )
+            await self.boost_repository.create(boost)
+            
+            # Update session boost count
+            session.boost_count += 1
+            updated_session = await self.session_repository.update(session)
+            
+            # Update cache
+            async with self._lock:
+                self._active_sessions[guild_id] = updated_session
+            
+            # Publish boost_added event
+            await event_service.publish(EVENT_BOOST_ADDED, {
+                "session_id": session.id,
+                "guild_id": guild_id,
+                "user_id": user_id,
+                "note": note,
+                "boost_count": updated_session.boost_count
+            })
+            
+            logger.info(f"User {user_id} boosted session {session.id}")
+            return updated_session
+        except Exception as e:
+            logger.error(f"Error recording boost: {e}")
+            return None
+    
+    async def has_user_voted(self, guild_id: int, user_id: int) -> bool:
+        """Check if user has voted for the active session."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                return False
+            
+            vote = await self.vote_repository.get_user_vote(session.id, user_id)
+            return vote is not None
+        except Exception as e:
+            logger.error(f"Error checking user vote: {e}")
+            return False
+    
+    async def get_vote_count(self, guild_id: int) -> int:
+        """Get vote count for the active session."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                return 0
+            
+            return await self.vote_repository.get_vote_count(session.id)
+        except Exception as e:
+            logger.error(f"Error getting vote count: {e}")
+            return 0
+    
+    async def get_boost_count(self, guild_id: int) -> int:
+        """Get boost count for the active session."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                return 0
+            
+            return await self.boost_repository.get_boost_count(session.id)
+        except Exception as e:
+            logger.error(f"Error getting boost count: {e}")
+            return 0
+    
+    async def get_session_statistics(self, guild_id: int) -> Dict[str, Any]:
+        """Get comprehensive statistics for the active session."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                return {}
+            
+            vote_count = await self.vote_repository.get_vote_count(session.id)
+            boost_count = await self.boost_repository.get_boost_count(session.id)
+            
+            return {
+                "session_id": session.id,
+                "guild_id": session.guild_id,
+                "host_id": session.host_id,
+                "server_code": session.server_code,
+                "status": session.status.value,
+                "vote_count": vote_count,
+                "boost_count": boost_count,
+                "duration": session.duration,
+                "duration_str": session.duration_str,
+                "started_at": session.started_at.isoformat() if session.started_at else None,
+                "ended_at": session.ended_at.isoformat() if session.ended_at else None
+            }
+        except Exception as e:
+            logger.error(f"Error getting session statistics: {e}")
+            return {}
+    
+    async def record_vote(self, guild_id: int, user_id: int) -> bool:
+        """Record a vote (alias for vote method)."""
+        session = await self.vote(guild_id, user_id)
+        return session is not None
+    
+    async def record_boost(self, guild_id: int, user_id: int, note: Optional[str] = None) -> bool:
+        """Record a boost (alias for boost method)."""
+        session = await self.boost(guild_id, user_id, note)
+        return session is not None
     
     async def shutdown(self) -> None:
         """Cleanup all background tasks."""

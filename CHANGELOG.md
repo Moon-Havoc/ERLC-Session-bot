@@ -5,7 +5,113 @@ All notable changes to SessionCore will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-30
+
+### Added
+- Internal event system (EventService) for pub/sub pattern
+  - Lightweight, no third-party dependencies
+  - Event listeners with priority support
+  - Async event publishing
+  - Events: session_started, session_ended, vote_added, boost_added
+- SessionVote and SessionBoost database models
+- SessionVoteRepository and SessionBoostRepository
+- Vote and boost commands: `/session vote`, `/session boost [note]`
+- SessionService extensions for voting and boosting
+  - vote(), boost(), has_user_voted(), get_vote_count(), get_boost_count()
+  - get_session_statistics(), record_vote(), record_boost()
+- Database migration 004 for vote and boost tables
+- Event publishing on session lifecycle and engagement actions
+- Immediate session embed updates on vote/boost
+- UNIQUE constraint on votes (one vote per user per session)
+- Multiple boosts allowed per user with optional notes
+- Ephemeral responses for vote/boost commands
+- Last updated timestamp on session embeds
+
+### Changed
+- SessionService now publishes events on session start/end
+- SessionService now integrates with EventService
+- Session embeds display vote and boost counts
+- Session embeds show last updated timestamp
+- Vote and boost counts persist across bot restarts
+
+### Fixed
+- Duplicate votes prevented at database level
+- Multiple boosts work correctly
+- Embed updates immediately on vote/boost
+- Events published correctly on all actions
+
+### Security
+- No special permissions required for voting/boosting
+- Available to all members who can view session channel
+- Database constraints enforce vote uniqueness
+
+### Database
+- Migration 004: Added session_votes and session_boosts tables
+- SessionVote: id, guild_id, session_id, user_id, created_at
+- SessionBoost: id, guild_id, session_id, user_id, note, created_at
+- UNIQUE constraint on (guild_id, session_id, user_id) for votes
+- Indexes on session_id and user_id for performance
+- ON DELETE CASCADE for referential integrity
+
+### Architecture
+- Event-driven architecture for extensibility
+- Future features can subscribe to events without modifying core services
+- Single source of truth pattern for all session operations
+- Event system documented in ARCHITECTURE.md
+
 ## [Unreleased]
+
+### Added
+- Internal event system (EventService) for pub/sub pattern
+  - Lightweight, no third-party dependencies
+  - Event listeners with priority support
+  - Async event publishing
+  - Events: session_started, session_ended, vote_added, boost_added
+- SessionVote and SessionBoost database models
+- SessionVoteRepository and SessionBoostRepository
+- Vote and boost commands: `/session vote`, `/session boost [note]`
+- SessionService extensions for voting and boosting
+  - vote(), boost(), has_user_voted(), get_vote_count(), get_boost_count()
+  - get_session_statistics(), record_vote(), record_boost()
+- Database migration 004 for vote and boost tables
+- Event publishing on session lifecycle and engagement actions
+- Immediate session embed updates on vote/boost
+- UNIQUE constraint on votes (one vote per user per session)
+- Multiple boosts allowed per user with optional notes
+- Ephemeral responses for vote/boost commands
+- Last updated timestamp on session embeds
+
+### Changed
+- SessionService now publishes events on session start/end
+- SessionService now integrates with EventService
+- Session embeds display vote and boost counts
+- Session embeds show last updated timestamp
+- Vote and boost counts persist across bot restarts
+
+### Fixed
+- Duplicate votes prevented at database level
+- Multiple boosts work correctly
+- Embed updates immediately on vote/boost
+- Events published correctly on all actions
+
+### Security
+- No special permissions required for voting/boosting
+- Available to all members who can view session channel
+- Database constraints enforce vote uniqueness
+
+### Database
+- Migration 004: Added session_votes and session_boosts tables
+- SessionVote: id, guild_id, session_id, user_id, created_at
+- SessionBoost: id, guild_id, session_id, user_id, note, created_at
+- UNIQUE constraint on (guild_id, session_id, user_id) for votes
+- Indexes on session_id and user_id for performance
+- ON DELETE CASCADE for referential integrity
+
+### Architecture
+- Event-driven architecture for extensibility
+- Future features can subscribe to events without modifying core services
+- Single source of truth pattern for all session operations
+- Event system documented in ARCHITECTURE.md
 
 ### Added
 - Complete session management core with lifecycle control

@@ -10,6 +10,8 @@ from .database import (
     VoteRepository,
     BoostRepository,
     HostRepository,
+    SessionVoteRepository,
+    SessionBoostRepository,
     database
 )
 from .models import (
@@ -21,7 +23,9 @@ from .models import (
     Vote,
     Boost,
     Host,
-    SessionStatus
+    SessionStatus,
+    SessionVote,
+    SessionBoost
 )
 from .migrations import Migration, MigrationRunner, get_migration_runner
 
@@ -35,6 +39,8 @@ __all__ = [
     "VoteRepository",
     "BoostRepository",
     "HostRepository",
+    "SessionVoteRepository",
+    "SessionBoostRepository",
     "database",
     "GuildConfig",
     "Branding",
@@ -45,6 +51,8 @@ __all__ = [
     "Boost",
     "Host",
     "SessionStatus",
+    "SessionVote",
+    "SessionBoost",
     "Migration",
     "MigrationRunner",
     "get_migration_runner",

@@ -311,13 +311,120 @@ class Session(commands.Cog):
             fields=fields
         )
         
-        # Add timestamp
+        # Add timestamp for last updated
         embed.timestamp = discord.utils.utcnow()
         
         return embed
     
+    @session_group.command(name="vote")
+    @commands.guild_only()
+    async def session_vote(self, ctx: commands.Context) -> None:
+        """Vote for the active session."""
+        # Check for active session
+        session = await self.session_service.get_active_session(ctx.guild.id)
+        if not session:
+            embed = await self.branding_service.error_embed(
+                ctx.guild.id,
+                title="No Active Session",
+                description="There is no active session to vote for."
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+            return
+        
+        # Check if user already voted
+        if await self.session_service.has_user_voted(ctx.guild.id, ctx.author.id):
+            embed = await self.branding_service.error_embed(
+                ctx.guild.id,
+                title="Already Voted",
+                description="You have already voted for this session."
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+            return
+        
+        try:
+            # Record vote
+            updated_session = await self.session_service.vote(ctx.guild.id, ctx.author.id)
+            if not updated_session:
+                embed = await self.branding_service.error_embed(
+                    ctx.guild.id,
+                    title="Vote Failed",
+                    description="Failed to record your vote. Please try again."
+                )
+                await ctx.send(embed=embed, ephemeral=True)
+                return
+            
+            # Update session embed
+            await self._update_session_embed(ctx.guild.id)
+            
+            # Send confirmation
+            embed = await self.branding_service.success_embed(
+                ctx.guild.id,
+                title="Vote Recorded",
+                description="Your vote has been recorded successfully."
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+            
+            logger.info(f"User {ctx.author.id} voted for session {session.id}")
+            
+        except Exception as e:
+            logger.error(f"Error recording vote: {e}")
+            embed = await self.branding_service.error_embed(
+                ctx.guild.id,
+                title="Vote Error",
+                description="An error occurred while recording your vote."
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+    
+    @session_group.command(name="boost")
+    @commands.guild_only()
+    async def session_boost(self, ctx: commands.Context, *, note: Optional[str] = None) -> None:
+        """Boost the active session."""
+        # Check for active session
+        session = await self.session_service.get_active_session(ctx.guild.id)
+        if not session:
+            embed = await self.branding_service.error_embed(
+                ctx.guild.id,
+                title="No Active Session",
+                description="There is no active session to boost."
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+            return
+        
+        try:
+            # Record boost
+            updated_session = await self.session_service.boost(ctx.guild.id, ctx.author.id, note)
+            if not updated_session:
+                embed = await self.branding_service.error_embed(
+                    ctx.guild.id,
+                    title="Boost Failed",
+                    description="Failed to record your boost. Please try again."
+                )
+                await ctx.send(embed=embed, ephemeral=True)
+                return
+            
+            # Update session embed
+            await self._update_session_embed(ctx.guild.id)
+            
+            # Send confirmation
+            embed = await self.branding_service.success_embed(
+                ctx.guild.id,
+                title="Boost Recorded",
+                description="Your boost has been recorded successfully."
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+            
+            logger.info(f"User {ctx.author.id} boosted session {session.id}")
+            
+        except Exception as e:
+            logger.error(f"Error recording boost: {e}")
+            embed = await self.branding_service.error_embed(
+                ctx.guild.id,
+                title="Boost Error",
+                description="An error occurred while recording your boost."
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+    
     async def _create_session_summary_embed(self, guild_id: int, session: Session) -> discord.Embed:
-        """Create a session summary embed for ended sessions."""
         config = await self.config_service.get_guild_config(guild_id)
         community_name = config.community_name if config else "Community"
         
@@ -377,6 +484,35 @@ class Session(commands.Cog):
             except discord.NotFound:
                 logger.warning(f"Session message {session.session_message_id} not found, removing reference")
                 await self.session_service.update_session_message(guild_id, None, None)
+            except Exception as e:
+                logger.error(f"Error updating session embed: {e}")
+        except Exception as e:
+            logger.error(f"Error updating session display: {e}")
+    
+    async def _update_session_embed(self, guild_id: int) -> None:
+        """Update the session embed immediately (called after vote/boost)."""
+        session = await self.session_service.get_active_session(guild_id)
+        if not session or not session.is_active:
+            return
+        
+        if not session.session_channel_id or not session.session_message_id:
+            return
+        
+        try:
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                return
+            
+            channel = guild.get_channel(session.session_channel_id)
+            if not channel or not isinstance(channel, discord.TextChannel):
+                return
+            
+            try:
+                message = await channel.fetch_message(session.session_message_id)
+                embed = await self._create_session_embed(guild_id, session)
+                await message.edit(embed=embed)
+            except discord.NotFound:
+                logger.warning(f"Session message {session.session_message_id} not found")
             except Exception as e:
                 logger.error(f"Error updating session embed: {e}")
         except Exception as e:

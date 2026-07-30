@@ -140,6 +140,35 @@ class Session:
 
 
 @dataclass
+class SessionVote:
+    """Vote for a session."""
+    id: Optional[int] = None
+    guild_id: int = 0
+    session_id: int = 0
+    user_id: int = 0
+    created_at: datetime = None
+    
+    def __post_init__(self) -> None:
+        if self.created_at is None:
+            self.created_at = datetime.utcnow()
+
+
+@dataclass
+class SessionBoost:
+    """Boost for a session."""
+    id: Optional[int] = None
+    guild_id: int = 0
+    session_id: int = 0
+    user_id: int = 0
+    note: Optional[str] = None
+    created_at: datetime = None
+    
+    def __post_init__(self) -> None:
+        if self.created_at is None:
+            self.created_at = datetime.utcnow()
+
+
+@dataclass
 class SessionParticipant:
     """Participant in a session."""
     id: Optional[int] = None

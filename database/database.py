@@ -404,6 +404,90 @@ class VoteRepository:
         return cursor.rowcount > 0
 
 
+class SessionVoteRepository:
+    """Repository for session vote operations."""
+    
+    def __init__(self, db: Database) -> None:
+        self.db = db
+    
+    async def create(self, vote: SessionVote) -> SessionVote:
+        """Create a new session vote."""
+        query = """
+            INSERT INTO session_votes (
+                guild_id, session_id, user_id, created_at
+            ) VALUES (?, ?, ?, ?)
+        """
+        cursor = await self.db.execute(query, (
+            vote.guild_id, vote.session_id, vote.user_id, vote.created_at
+        ))
+        vote.id = cursor.lastrowid
+        return vote
+    
+    async def get_user_vote(self, session_id: int, user_id: int) -> Optional[SessionVote]:
+        """Get a user's vote for a session."""
+        query = """
+            SELECT * FROM session_votes 
+            WHERE session_id = ? AND user_id = ?
+        """
+        row = await self.db.fetchone(query, (session_id, user_id))
+        if row:
+            return SessionVote(**dict(row))
+        return None
+    
+    async def get_session_votes(self, session_id: int) -> List[SessionVote]:
+        """Get all votes for a session."""
+        query = "SELECT * FROM session_votes WHERE session_id = ?"
+        rows = await self.db.fetchall(query, (session_id,))
+        return [SessionVote(**dict(row)) for row in rows]
+    
+    async def get_vote_count(self, session_id: int) -> int:
+        """Get vote count for a session."""
+        query = "SELECT COUNT(*) FROM session_votes WHERE session_id = ?"
+        return await self.db.fetchval(query, (session_id,)) or 0
+    
+    async def delete_user_vote(self, session_id: int, user_id: int) -> bool:
+        """Delete a user's vote for a session."""
+        query = "DELETE FROM session_votes WHERE session_id = ? AND user_id = ?"
+        cursor = await self.db.execute(query, (session_id, user_id))
+        return cursor.rowcount > 0
+
+
+class SessionBoostRepository:
+    """Repository for session boost operations."""
+    
+    def __init__(self, db: Database) -> None:
+        self.db = db
+    
+    async def create(self, boost: SessionBoost) -> SessionBoost:
+        """Create a new session boost."""
+        query = """
+            INSERT INTO session_boosts (
+                guild_id, session_id, user_id, note, created_at
+            ) VALUES (?, ?, ?, ?, ?)
+        """
+        cursor = await self.db.execute(query, (
+            boost.guild_id, boost.session_id, boost.user_id, boost.note, boost.created_at
+        ))
+        boost.id = cursor.lastrowid
+        return boost
+    
+    async def get_session_boosts(self, session_id: int) -> List[SessionBoost]:
+        """Get all boosts for a session."""
+        query = "SELECT * FROM session_boosts WHERE session_id = ?"
+        rows = await self.db.fetchall(query, (session_id,))
+        return [SessionBoost(**dict(row)) for row in rows]
+    
+    async def get_boost_count(self, session_id: int) -> int:
+        """Get boost count for a session."""
+        query = "SELECT COUNT(*) FROM session_boosts WHERE session_id = ?"
+        return await self.db.fetchval(query, (session_id,)) or 0
+    
+    async def get_user_boost_count(self, session_id: int, user_id: int) -> int:
+        """Get boost count for a user in a session."""
+        query = "SELECT COUNT(*) FROM session_boosts WHERE session_id = ? AND user_id = ?"
+        return await self.db.fetchval(query, (session_id, user_id)) or 0
+
+
 class BoostRepository:
     """Repository for boost operations."""
     

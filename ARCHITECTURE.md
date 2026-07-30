@@ -298,6 +298,64 @@ Log update (embed update handled by cog)
 Sleep 60 seconds
 ```
 
+### Event Flow
+
+```
+Action (SessionService)
+    ↓
+EventService.publish(event_name, data)
+    ↓
+Create Event object
+    ↓
+Get all listeners for event
+    ↓
+Execute each listener callback
+    ↓
+Continue regardless of listener errors
+```
+
+### Vote Flow
+
+```
+User Command (/session vote)
+    ↓
+Check active session exists
+    ↓
+Check user hasn't already voted
+    ↓
+SessionService.vote()
+    ↓
+Create SessionVote record
+    ↓
+Update session vote count
+    ↓
+Publish vote_added event
+    ↓
+Update session embed immediately
+    ↓
+Send ephemeral confirmation
+```
+
+### Boost Flow
+
+```
+User Command (/session boost [note])
+    ↓
+Check active session exists
+    ↓
+SessionService.boost()
+    ↓
+Create SessionBoost record
+    ↓
+Update session boost count
+    ↓
+Publish boost_added event
+    ↓
+Update session embed immediately
+    ↓
+Send ephemeral confirmation
+```
+
 ## Key Design Decisions
 
 ### 1. Unified Configuration Model
@@ -535,7 +593,200 @@ def migration_002_merge_branding_to_guild_config(cursor: sqlite3.Cursor) -> None
 - **API Response Time**: External API performance
 - **Command Execution Time**: Track slow commands
 
-## Testing Strategy
+## Event System Architecture
+
+### Overview
+
+SessionCore includes a lightweight internal event system (EventService) that implements a publish/subscribe pattern for inter-service communication. This allows services to communicate without direct dependencies, enabling future features like statistics, logging, dashboards, and webhooks to subscribe to events without modifying core services.
+
+### Design Principles
+
+- **No Third-Party Dependencies**: Built with standard asyncio and typing only
+- **Async-First**: All event operations are asynchronous
+- **Error Isolation**: Listener errors don't crash the system
+- **Priority Support**: Listeners can be prioritized for execution order
+- **Zero-Dependency Listeners**: Bot continues functioning if no listeners exist
+
+### Event Components
+
+#### Event Object
+```python
+class Event:
+    name: str  # Event name
+    data: Dict[str, Any]  # Event payload
+    timestamp: float  # Event creation time
+```
+
+#### EventListener Object
+```python
+class EventListener:
+    event_name: str  # Event to listen for
+    callback: Callable[[Event], None]  # Async callback
+    priority: int  # Execution priority (higher first)
+    id: int  # Unique listener ID
+```
+
+#### EventService
+```python
+class EventService:
+    async def subscribe(event_name, callback, priority=0) -> EventListener
+    async def unsubscribe(listener) -> bool
+    async def publish(event_name, data) -> None
+    async def publish_and_wait(event_name, data, timeout=5.0) -> None
+    get_listener_count(event_name) -> int
+    get_all_event_names() -> List[str]
+```
+
+### Available Events
+
+#### session_started
+Published when a new session is created and started.
+
+**Payload:**
+```python
+{
+    "session_id": int,
+    "guild_id": int,
+    "host_id": int,
+    "server_code": str
+}
+```
+
+**Use Cases:**
+- Initialize session statistics
+- Send notifications to external systems
+- Start session-specific timers
+- Log session start to audit log
+
+#### session_ended
+Published when a session is ended.
+
+**Payload:**
+```python
+{
+    "session_id": int,
+    "guild_id": int,
+    "host_id": int,
+    "duration": int  # Duration in seconds
+}
+```
+
+**Use Cases:**
+- Calculate final statistics
+- Archive session data
+- Send completion notifications
+- Update leaderboards
+- Trigger achievement checks
+
+#### vote_added
+Published when a user votes for a session.
+
+**Payload:**
+```python
+{
+    "session_id": int,
+    "guild_id": int,
+    "user_id": int,
+    "vote_count": int
+}
+```
+
+**Use Cases:**
+- Update live statistics
+- Send vote notifications
+- Track engagement metrics
+- Trigger vote-based achievements
+
+#### boost_added
+Published when a user boosts a session.
+
+**Payload:**
+```python
+{
+    "session_id": int,
+    "guild_id": int,
+    "user_id": int,
+    "note": Optional[str],
+    "boost_count": int
+}
+```
+
+**Use Cases:**
+- Update live statistics
+- Send boost notifications
+- Track engagement metrics
+- Trigger boost-based achievements
+
+### Event Subscription Example
+
+```python
+from services import event_service, EVENT_VOTE_ADDED
+
+async def on_vote_added(event: Event) -> None:
+    """Handle vote added event."""
+    session_id = event.data["session_id"]
+    user_id = event.data["user_id"]
+    # Process vote...
+    pass
+
+# Subscribe to event
+listener = await event_service.subscribe(
+    EVENT_VOTE_ADDED,
+    on_vote_added,
+    priority=10
+)
+
+# Unsubscribe when done
+await event_service.unsubscribe(listener)
+```
+
+### Event Publishing Example
+
+```python
+from services import event_service, EVENT_VOTE_ADDED
+
+await event_service.publish(EVENT_VOTE_ADDED, {
+    "session_id": 123,
+    "guild_id": 456,
+    "user_id": 789,
+    "vote_count": 5
+})
+```
+
+### Best Practices
+
+1. **Don't Block**: Keep listener callbacks fast and non-blocking
+2. **Error Handling**: Always wrap listener code in try/except
+3. **Priority Use**: Use priority for execution order (e.g., validation before processing)
+4. **Clean Up**: Always unsubscribe listeners when they're no longer needed
+5. **Data Validation**: Validate event data in listeners before processing
+6. **Logging**: Log event processing for debugging
+
+### Future Event Extensions
+
+The event system is designed for easy extension. Future events might include:
+
+- `participant_joined` - When a user joins a session
+- `participant_left` - When a user leaves a session
+- `session_cancelled` - When a session is cancelled
+- `achievement_unlocked` - When a user earns an achievement
+- `statistics_updated` - When session statistics change
+- `api_sync_complete` - When API sync operations complete
+
+### Error Handling
+
+- Listener errors are logged but don't stop event propagation
+- If a listener fails, other listeners still execute
+- Listeners should handle their own errors gracefully
+- EventService logs errors for debugging
+
+### Performance Considerations
+
+- Events are lightweight and fast
+- Listeners execute in sequence (not parallel)
+- Consider using `publish_and_wait` for critical events
+- Use priority for time-sensitive listeners
+- Avoid heavy processing in listeners
 
 ### Unit Tests
 
