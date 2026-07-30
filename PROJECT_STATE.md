@@ -48,7 +48,11 @@ The core framework architecture is complete and operational. The project provide
 ### ✅ Services Layer
 - **ConfigService**: Configuration management with caching
 - **BrandingService**: Branding and embed creation
-- **SessionService**: Session management foundation
+- **SessionService**: Complete session lifecycle management
+  - Single active session per guild enforcement
+  - Session caching with automatic restoration
+  - Background task for live duration updates
+  - Graceful shutdown and cleanup
 - **StatsService**: Statistics tracking foundation
 - **APIService**: Optional external API integration with auto-disable
 
@@ -58,7 +62,10 @@ The core framework architecture is complete and operational. The project provide
   - `/branding setname/setdescription/setlogo/setcolor/setfooter/setfootericon/setwebsite/setinvite/setemoji`
   - `/channel session/logs` - Channel configuration
   - `/roles admin/management/host/moderator` - Role configuration
-- **Session Cog**: Structure ready for session commands
+- **Session Cog**: Complete session management commands
+  - `/session start <server_code> [notes]` - Start a new session
+  - `/session end` - End the active session
+  - `/session info` - Display active session information
 - **Stats Cog**: Structure ready for statistics commands
 - **Utility Cog**: General utility commands (ping, info, help, invite, website, avatar, server, user)
 
@@ -75,19 +82,15 @@ The core framework architecture is complete and operational. The project provide
 
 ## In Progress
 
-### 🚧 Configuration and Branding Commands
-- **Status**: Complete slash command implementation
-- **Validation**: URL validation, hex color parsing, role/channel existence checks
-- **Permission Checks**: Server admin or configured admin role required
-- **User Feedback**: Clear error messages and success confirmations
+### 🚧 Session Management Core
+- **Status**: Core implementation complete
+- **Features**: Single active session per guild, session lifecycle management, background updates
+- **Commands**: `/session start`, `/session end`, `/session info`
+- **Validation**: Permission checks, channel verification, error handling
+- **Persistence**: Sessions survive bot restarts with automatic restoration
+- **Background Updates**: 60-second interval for duration and timestamp updates
 
 ## Not Started
-
-### 📋 Session Functionality
-- Session creation and management commands
-- Participant management
-- Session scheduling and reminders
-- Session completion tracking
 
 ### 📋 Statistics Functionality  
 - Leaderboard systems
@@ -100,6 +103,12 @@ The core framework architecture is complete and operational. The project provide
 - External API sync for statistics
 - Webhook support
 - API authentication enhancements
+
+### 📋 Session Participant Management
+- Player tracking
+- Attendance recording
+- Player statistics
+- Join/leave functionality
 
 ## Architecture Decisions
 

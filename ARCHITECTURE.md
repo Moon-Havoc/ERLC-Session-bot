@@ -252,6 +252,52 @@ Cache refresh
 Return success
 ```
 
+### Session Management Flow
+
+```
+User Command (Session Cog)
+    ↓
+Permission Check
+    ↓
+SessionService.create_session()
+    ↓
+Check for existing active session
+    ↓ (no active session)
+Validate session channel
+    ↓
+SessionRepository.create()
+    ↓
+Cache active session
+    ↓
+Start background updater task
+    ↓
+Create and send session embed
+    ↓
+Update session with message/channel IDs
+    ↓
+Return success
+```
+
+### Session Update Flow
+
+```
+Background Task (60-second interval)
+    ↓
+SessionService._start_session_updater()
+    ↓
+Get active session from cache
+    ↓
+Calculate current duration
+    ↓
+Update duration in database
+    ↓
+Update cache
+    ↓
+Log update (embed update handled by cog)
+    ↓
+Sleep 60 seconds
+```
+
 ## Key Design Decisions
 
 ### 1. Unified Configuration Model

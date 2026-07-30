@@ -50,6 +50,12 @@ class SessionCoreBot(commands.Bot):
         # Load cogs
         await self.load_cogs()
         logger.info("Cogs loaded")
+        
+        # Restore active sessions
+        from services import SessionService
+        session_service = SessionService()
+        await session_service.restore_sessions()
+        logger.info("Active sessions restored")
     
     async def load_cogs(self) -> None:
         """Load all bot cogs."""
@@ -146,6 +152,17 @@ class SessionCoreBot(commands.Bot):
             description="An error occurred while executing this command."
         )
         await ctx.send(embed=embed)
+    
+    async def close(self) -> None:
+        """Close the bot and cleanup resources."""
+        logger.info("Shutting down bot...")
+        
+        # Shutdown session service
+        from services import SessionService
+        session_service = SessionService()
+        await session_service.shutdown()
+        
+        await super().close()
 
 
 async def main() -> None:

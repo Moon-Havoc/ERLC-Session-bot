@@ -9,7 +9,7 @@ from enum import Enum
 class SessionStatus(Enum):
     """Status of a session."""
     ACTIVE = "active"
-    COMPLETED = "completed"
+    ENDED = "ended"
     CANCELLED = "cancelled"
 
 
@@ -100,17 +100,16 @@ class Session:
     id: Optional[int] = None
     guild_id: int = 0
     host_id: int = 0
-    session_type: str = ""
-    title: str = ""
-    description: Optional[str] = None
-    scheduled_time: Optional[datetime] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    server_code: str = ""
+    notes: Optional[str] = None
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
     status: SessionStatus = SessionStatus.ACTIVE
-    max_participants: Optional[int] = None
-    current_participants: int = 0
-    message_id: Optional[int] = None
-    channel_id: Optional[int] = None
+    session_channel_id: Optional[int] = None
+    session_message_id: Optional[int] = None
+    vote_count: int = 0
+    boost_count: int = 0
+    duration: Optional[int] = None  # Duration in seconds
     created_at: datetime = None
     updated_at: datetime = None
     
@@ -119,6 +118,25 @@ class Session:
             self.created_at = datetime.utcnow()
         if self.updated_at is None:
             self.updated_at = datetime.utcnow()
+    
+    @property
+    def is_active(self) -> bool:
+        """Check if session is currently active."""
+        return self.status == SessionStatus.ACTIVE
+    
+    @property
+    def duration_str(self) -> str:
+        """Get formatted duration string."""
+        if self.duration:
+            hours, remainder = divmod(self.duration, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            if hours > 0:
+                return f"{hours}h {minutes}m {seconds}s"
+            elif minutes > 0:
+                return f"{minutes}m {seconds}s"
+            else:
+                return f"{seconds}s"
+        return "0s"
 
 
 @dataclass

@@ -396,6 +396,120 @@ def migration_002_rollback(cursor: sqlite3.Cursor) -> None:
     cursor.execute("ALTER TABLE guild_config_backup RENAME TO guild_config")
 
 
+def migration_003_update_session_schema(cursor: sqlite3.Cursor) -> None:
+    """Update session schema for session management core."""
+    
+    # Create new sessions table with updated schema
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sessions_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            host_id INTEGER NOT NULL,
+            server_code TEXT NOT NULL,
+            notes TEXT,
+            started_at TEXT,
+            ended_at TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            session_channel_id INTEGER,
+            session_message_id INTEGER,
+            vote_count INTEGER DEFAULT 0,
+            boost_count INTEGER DEFAULT 0,
+            duration INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (guild_id) REFERENCES guild_config(guild_id)
+        )
+    """)
+    
+    # Migrate existing sessions if any
+    cursor.execute("""
+        INSERT INTO sessions_new 
+        SELECT id, guild_id, host_id, 
+               COALESCE(title, '') as server_code,
+               description as notes,
+               start_time as started_at,
+               end_time as ended_at,
+               CASE 
+                   WHEN status = 'completed' THEN 'ended'
+                   ELSE status
+               END as status,
+               channel_id as session_channel_id,
+               message_id as session_message_id,
+               0 as vote_count,
+               0 as boost_count,
+               NULL as duration,
+               created_at, updated_at
+        FROM sessions
+    """)
+    
+    # Drop old table and rename new one
+    cursor.execute("DROP TABLE sessions")
+    cursor.execute("ALTER TABLE sessions_new RENAME TO sessions")
+    
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_guild ON sessions(guild_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_id)")
+
+
+def migration_003_rollback(cursor: sqlite3.Cursor) -> None:
+    """Rollback migration 003 - restore old session schema."""
+    
+    # Create old sessions table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sessions_old (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            host_id INTEGER NOT NULL,
+            session_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            scheduled_time TEXT,
+            start_time TEXT,
+            end_time TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            max_participants INTEGER,
+            current_participants INTEGER DEFAULT 0,
+            message_id INTEGER,
+            channel_id INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (guild_id) REFERENCES guild_config(guild_id)
+        )
+    """)
+    
+    # Migrate data back
+    cursor.execute("""
+        INSERT INTO sessions_old
+        SELECT id, guild_id, host_id,
+               'training' as session_type,
+               server_code as title,
+               notes as description,
+               NULL as scheduled_time,
+               started_at as start_time,
+               ended_at as end_time,
+               CASE 
+                   WHEN status = 'ended' THEN 'completed'
+                   ELSE status
+               END as status,
+               NULL as max_participants,
+               0 as current_participants,
+               session_message_id as message_id,
+               session_channel_id as channel_id,
+               created_at, updated_at
+        FROM sessions
+    """)
+    
+    # Drop new table and restore old one
+    cursor.execute("DROP TABLE sessions")
+    cursor.execute("ALTER TABLE sessions_old RENAME TO sessions")
+    
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_guild ON sessions(guild_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_id)")
+
+
 # Register migrations
 def get_migration_runner(db: Database) -> MigrationRunner:
     """Get configured migration runner."""
@@ -414,6 +528,13 @@ def get_migration_runner(db: Database) -> MigrationRunner:
         name="merge_branding_to_guild_config",
         up=migration_002_merge_branding_to_guild_config,
         down=migration_002_rollback
+    ))
+    
+    runner.register(Migration(
+        version=3,
+        name="update_session_schema",
+        up=migration_003_update_session_schema,
+        down=migration_003_rollback
     ))
     
     return runner

@@ -1,11 +1,14 @@
 """Session service for managing training and practice sessions."""
 
+from __future__ import annotations
+
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
+import asyncio
 
 from database import (
-    Session, SessionParticipant, SessionStatus,
-    SessionRepository, SessionParticipantRepository, database
+    Session, SessionStatus,
+    SessionRepository, database
 )
 from services.api_service import api_service
 from utils.logger import get_logger
@@ -14,39 +17,51 @@ logger = get_logger(__name__)
 
 
 class SessionService:
-    """Service for managing sessions."""
+    """Service for managing sessions with lifecycle control."""
     
     def __init__(self) -> None:
         """Initialize session service."""
         self.session_repository = SessionRepository(database)
-        self.participant_repository = SessionParticipantRepository(database)
+        self._active_sessions: dict[int, Session] = {}  # guild_id -> session
+        self._update_tasks: dict[int, asyncio.Task] = {}  # guild_id -> update task
+        self._lock = asyncio.Lock()
     
     async def create_session(
         self,
         guild_id: int,
         host_id: int,
-        session_type: str,
-        title: str,
-        description: Optional[str] = None,
-        scheduled_time: Optional[datetime] = None,
-        max_participants: Optional[int] = None,
-        channel_id: Optional[int] = None
+        server_code: str,
+        notes: Optional[str] = None,
+        session_channel_id: Optional[int] = None
     ) -> Optional[Session]:
-        """Create a new session."""
+        """Create a new session (only one active session per guild)."""
         try:
+            # Check for existing active session
+            existing = await self.get_active_session(guild_id)
+            if existing:
+                logger.warning(f"Active session already exists for guild {guild_id}")
+                return None
+            
             session = Session(
                 guild_id=guild_id,
                 host_id=host_id,
-                session_type=session_type,
-                title=title,
-                description=description,
-                scheduled_time=scheduled_time,
-                max_participants=max_participants,
-                channel_id=channel_id,
-                status=SessionStatus.ACTIVE
+                server_code=server_code,
+                notes=notes,
+                started_at=datetime.utcnow(),
+                status=SessionStatus.ACTIVE,
+                session_channel_id=session_channel_id,
+                vote_count=0,
+                boost_count=0
             )
             
             created_session = await self.session_repository.create(session)
+            
+            # Cache active session
+            async with self._lock:
+                self._active_sessions[guild_id] = created_session
+            
+            # Start background updater
+            await self._start_session_updater(guild_id)
             
             # Sync to API if available
             if api_service.is_available():
@@ -54,8 +69,7 @@ class SessionService:
                     "id": created_session.id,
                     "guild_id": created_session.guild_id,
                     "host_id": created_session.host_id,
-                    "session_type": created_session.session_type,
-                    "title": created_session.title,
+                    "server_code": created_session.server_code,
                     "status": created_session.status.value
                 })
             
@@ -65,7 +79,143 @@ class SessionService:
             logger.error(f"Error creating session: {e}")
             return None
     
-    async def get_session(self, session_id: int) -> Optional[Session]:
+    async def get_active_session(self, guild_id: int) -> Optional[Session]:
+        """Get the active session for a guild."""
+        try:
+            # Check cache first
+            async with self._lock:
+                if guild_id in self._active_sessions:
+                    cached = self._active_sessions[guild_id]
+                    if cached.is_active:
+                        return cached
+                    else:
+                        # Remove inactive session from cache
+                        del self._active_sessions[guild_id]
+            
+            # Check database
+            session = await self.session_repository.get_active_session(guild_id)
+            if session:
+                async with self._lock:
+                    self._active_sessions[guild_id] = session
+            return session
+        except Exception as e:
+            logger.error(f"Error getting active session for guild {guild_id}: {e}")
+            return None
+    
+    async def has_active_session(self, guild_id: int) -> bool:
+        """Check if guild has an active session."""
+        return await self.get_active_session(guild_id) is not None
+    
+    async def end_session(self, guild_id: int) -> Optional[Session]:
+        """End the active session for a guild."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                logger.warning(f"No active session found for guild {guild_id}")
+                return None
+            
+            # Calculate duration
+            if session.started_at:
+                duration = int((datetime.utcnow() - session.started_at).total_seconds())
+            else:
+                duration = 0
+            
+            # Update session
+            session.ended_at = datetime.utcnow()
+            session.status = SessionStatus.ENDED
+            session.duration = duration
+            
+            updated_session = await self.session_repository.update(session)
+            
+            # Stop background updater
+            await self._stop_session_updater(guild_id)
+            
+            # Remove from cache
+            async with self._lock:
+                if guild_id in self._active_sessions:
+                    del self._active_sessions[guild_id]
+            
+            # Sync to API if available
+            if api_service.is_available():
+                await api_service.sync_session({
+                    "id": updated_session.id,
+                    "guild_id": updated_session.guild_id,
+                    "host_id": updated_session.host_id,
+                    "server_code": updated_session.server_code,
+                    "status": updated_session.status.value,
+                    "duration": duration
+                })
+            
+            logger.info(f"Ended session {updated_session.id} for guild {guild_id}")
+            return updated_session
+        except Exception as e:
+            logger.error(f"Error ending session for guild {guild_id}: {e}")
+            return None
+    
+    async def update_session_message(
+        self,
+        guild_id: int,
+        message_id: int,
+        channel_id: int
+    ) -> Optional[Session]:
+        """Update session message and channel IDs."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                return None
+            
+            session.session_message_id = message_id
+            session.session_channel_id = channel_id
+            updated = await self.session_repository.update(session)
+            
+            # Update cache
+            async with self._lock:
+                self._active_sessions[guild_id] = updated
+            
+            return updated
+        except Exception as e:
+            logger.error(f"Error updating session message: {e}")
+            return None
+    
+    async def increment_vote_count(self, guild_id: int) -> Optional[Session]:
+        """Increment vote count for active session."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                return None
+            
+            session.vote_count += 1
+            updated = await self.session_repository.update(session)
+            
+            # Update cache
+            async with self._lock:
+                self._active_sessions[guild_id] = updated
+            
+            return updated
+        except Exception as e:
+            logger.error(f"Error incrementing vote count: {e}")
+            return None
+    
+    async def increment_boost_count(self, guild_id: int) -> Optional[Session]:
+        """Increment boost count for active session."""
+        try:
+            session = await self.get_active_session(guild_id)
+            if not session:
+                return None
+            
+            session.boost_count += 1
+            updated = await self.session_repository.update(session)
+            
+            # Update cache
+            async with self._lock:
+                self._active_sessions[guild_id] = updated
+            
+            return updated
+        except Exception as e:
+            logger.error(f"Error incrementing boost count: {e}")
+            return None
+    
+    async def get_session_by_id(self, session_id: int) -> Optional[Session]:
         """Get session by ID."""
         try:
             return await self.session_repository.get_by_id(session_id)
@@ -81,198 +231,82 @@ class SessionService:
             logger.error(f"Error getting sessions for guild {guild_id}: {e}")
             return []
     
-    async def get_active_sessions(self, guild_id: int) -> List[Session]:
-        """Get all active sessions for a guild."""
+    async def restore_sessions(self) -> int:
+        """Restore active sessions from database on startup."""
         try:
-            return await self.session_repository.get_active_sessions(guild_id)
-        except Exception as e:
-            logger.error(f"Error getting active sessions for guild {guild_id}: {e}")
-            return []
-    
-    async def update_session(
-        self,
-        session_id: int,
-        title: Optional[str] = None,
-        description: Optional[str] = None,
-        scheduled_time: Optional[datetime] = None,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None,
-        status: Optional[SessionStatus] = None,
-        max_participants: Optional[int] = None,
-        current_participants: Optional[int] = None,
-        message_id: Optional[int] = None,
-        channel_id: Optional[int] = None
-    ) -> Optional[Session]:
-        """Update session details."""
-        try:
-            session = await self.session_repository.get_by_id(session_id)
-            if not session:
-                logger.warning(f"Session {session_id} not found")
-                return None
+            active_sessions = await self.session_repository.get_all_active_sessions()
+            restored_count = 0
             
-            # Update provided fields
-            if title is not None:
-                session.title = title
-            if description is not None:
-                session.description = description
-            if scheduled_time is not None:
-                session.scheduled_time = scheduled_time
-            if start_time is not None:
-                session.start_time = start_time
-            if end_time is not None:
-                session.end_time = end_time
-            if status is not None:
-                session.status = status
-            if max_participants is not None:
-                session.max_participants = max_participants
-            if current_participants is not None:
-                session.current_participants = current_participants
-            if message_id is not None:
-                session.message_id = message_id
-            if channel_id is not None:
-                session.channel_id = channel_id
-            
-            updated_session = await self.session_repository.update(session)
-            
-            # Sync to API if available
-            if api_service.is_available():
-                await api_service.sync_session({
-                    "id": updated_session.id,
-                    "guild_id": updated_session.guild_id,
-                    "host_id": updated_session.host_id,
-                    "session_type": updated_session.session_type,
-                    "title": updated_session.title,
-                    "status": updated_session.status.value
-                })
-            
-            logger.info(f"Updated session {session_id}")
-            return updated_session
-        except Exception as e:
-            logger.error(f"Error updating session {session_id}: {e}")
-            return None
-    
-    async def delete_session(self, session_id: int) -> bool:
-        """Delete a session."""
-        try:
-            result = await self.session_repository.delete(session_id)
-            if result:
-                logger.info(f"Deleted session {session_id}")
-            return result
-        except Exception as e:
-            logger.error(f"Error deleting session {session_id}: {e}")
-            return False
-    
-    async def start_session(self, session_id: int) -> Optional[Session]:
-        """Start a session."""
-        return await self.update_session(
-            session_id,
-            start_time=datetime.utcnow(),
-            status=SessionStatus.ACTIVE
-        )
-    
-    async def end_session(self, session_id: int) -> Optional[Session]:
-        """End a session."""
-        return await self.update_session(
-            session_id,
-            end_time=datetime.utcnow(),
-            status=SessionStatus.COMPLETED
-        )
-    
-    async def cancel_session(self, session_id: int) -> Optional[Session]:
-        """Cancel a session."""
-        return await self.update_session(
-            session_id,
-            status=SessionStatus.CANCELLED
-        )
-    
-    async def add_participant(
-        self,
-        session_id: int,
-        user_id: int
-    ) -> Optional[SessionParticipant]:
-        """Add participant to session."""
-        try:
-            participant = SessionParticipant(
-                session_id=session_id,
-                user_id=user_id
-            )
-            
-            created_participant = await self.participant_repository.add_participant(participant)
-            
-            # Update session participant count
-            session = await self.session_repository.get_by_id(session_id)
-            if session:
-                await self.update_session(session_id, current_participants=session.current_participants + 1)
-            
-            logger.info(f"Added user {user_id} to session {session_id}")
-            return created_participant
-        except Exception as e:
-            logger.error(f"Error adding participant to session {session_id}: {e}")
-            return None
-    
-    async def remove_participant(
-        self,
-        session_id: int,
-        user_id: int
-    ) -> bool:
-        """Remove participant from session."""
-        try:
-            result = await self.participant_repository.remove_participant(session_id, user_id)
-            
-            if result:
-                # Update session participant count
-                session = await self.session_repository.get_by_id(session_id)
-                if session:
-                    new_count = max(0, session.current_participants - 1)
-                    await self.update_session(session_id, current_participants=new_count)
+            for session in active_sessions:
+                # Cache the session
+                async with self._lock:
+                    self._active_sessions[session.guild_id] = session
                 
-                logger.info(f"Removed user {user_id} from session {session_id}")
+                # Start background updater
+                await self._start_session_updater(session.guild_id)
+                restored_count += 1
+                logger.info(f"Restored active session {session.id} for guild {session.guild_id}")
             
-            return result
+            logger.info(f"Restored {restored_count} active sessions")
+            return restored_count
         except Exception as e:
-            logger.error(f"Error removing participant from session {session_id}: {e}")
-            return False
-    
-    async def get_participants(self, session_id: int) -> List[SessionParticipant]:
-        """Get all participants for a session."""
-        try:
-            return await self.participant_repository.get_participants(session_id)
-        except Exception as e:
-            logger.error(f"Error getting participants for session {session_id}: {e}")
-            return []
-    
-    async def is_participant(self, session_id: int, user_id: int) -> bool:
-        """Check if user is a participant in session."""
-        participants = await self.get_participants(session_id)
-        return any(p.user_id == user_id for p in participants)
-    
-    async def get_user_sessions(self, user_id: int, guild_id: int) -> List[Session]:
-        """Get sessions where user is a participant."""
-        try:
-            # Get all guild sessions
-            sessions = await self.get_guild_sessions(guild_id)
-            
-            # Filter sessions where user is a participant
-            user_sessions = []
-            for session in sessions:
-                if await self.is_participant(session.id, user_id):
-                    user_sessions.append(session)
-            
-            return user_sessions
-        except Exception as e:
-            logger.error(f"Error getting sessions for user {user_id}: {e}")
-            return []
-    
-    async def cleanup_old_sessions(self, days: int = 30) -> int:
-        """Clean up old completed/cancelled sessions."""
-        try:
-            from datetime import timedelta
-            cutoff_date = datetime.utcnow() - timedelta(days=days)
-            
-            # Get sessions for cleanup (this would need a new repository method)
-            # For now, this is a placeholder for future implementation
-            logger.info(f"Session cleanup placeholder - would clean sessions older than {days} days")
+            logger.error(f"Error restoring sessions: {e}")
             return 0
-        except Exception as e:
-            logger.error(f"Error cleaning up old sessions: {e}")
-            return 0
+    
+    async def _start_session_updater(self, guild_id: int) -> None:
+        """Start background task to update session embeds."""
+        if guild_id in self._update_tasks:
+            return  # Already running
+        
+        async def update_loop():
+            while True:
+                try:
+                    session = await self.get_active_session(guild_id)
+                    if not session or not session.is_active:
+                        # Session ended, stop updater
+                        await self._stop_session_updater(guild_id)
+                        break
+                    
+                    # Calculate current duration
+                    if session.started_at:
+                        current_duration = int((datetime.utcnow() - session.started_at).total_seconds())
+                        if current_duration != session.duration:
+                            session.duration = current_duration
+                            await self.session_repository.update(session)
+                    
+                    # Note: The actual embed update is handled by the cog
+                    # The service only updates the data
+                    logger.debug(f"Updated session {session.id} duration: {session.duration_str}")
+                    
+                    await asyncio.sleep(60)  # Update every 60 seconds
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"Error in session updater for guild {guild_id}: {e}")
+                    await asyncio.sleep(60)  # Continue despite errors
+        
+        task = asyncio.create_task(update_loop())
+        async with self._lock:
+            self._update_tasks[guild_id] = task
+    
+    async def _stop_session_updater(self, guild_id: int) -> None:
+        """Stop background task for a guild."""
+        async with self._lock:
+            if guild_id in self._update_tasks:
+                task = self._update_tasks[guild_id]
+                task.cancel()
+                del self._update_tasks[guild_id]
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+    
+    async def shutdown(self) -> None:
+        """Cleanup all background tasks."""
+        async with self._lock:
+            for guild_id, task in self._update_tasks.items():
+                task.cancel()
+            self._update_tasks.clear()
+        
+        # Wait for tasks to complete
+        await asyncio.sleep(0.1)

@@ -202,18 +202,16 @@ class SessionRepository:
         """Create a new session."""
         query = """
             INSERT INTO sessions (
-                guild_id, host_id, session_type, title, description,
-                scheduled_time, start_time, end_time, status,
-                max_participants, current_participants, message_id,
-                channel_id, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                guild_id, host_id, server_code, notes, started_at, ended_at,
+                status, session_channel_id, session_message_id, vote_count,
+                boost_count, duration, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         cursor = await self.db.execute(query, (
-            session.guild_id, session.host_id, session.session_type,
-            session.title, session.description, session.scheduled_time,
-            session.start_time, session.end_time, session.status.value,
-            session.max_participants, session.current_participants,
-            session.message_id, session.channel_id,
+            session.guild_id, session.host_id, session.server_code, session.notes,
+            session.started_at, session.ended_at, session.status.value,
+            session.session_channel_id, session.session_message_id,
+            session.vote_count, session.boost_count, session.duration,
             session.created_at, session.updated_at
         ))
         session.id = cursor.lastrowid
@@ -240,14 +238,28 @@ class SessionRepository:
             sessions.append(Session(**data))
         return sessions
     
-    async def get_active_sessions(self, guild_id: int) -> List[Session]:
-        """Get all active sessions for a guild."""
+    async def get_active_session(self, guild_id: int) -> Optional[Session]:
+        """Get the active session for a guild (only one active session per guild)."""
         query = """
             SELECT * FROM sessions 
             WHERE guild_id = ? AND status = ? 
+            ORDER BY created_at DESC LIMIT 1
+        """
+        row = await self.db.fetchone(query, (guild_id, SessionStatus.ACTIVE.value))
+        if row:
+            data = dict(row)
+            data['status'] = SessionStatus(data['status'])
+            return Session(**data)
+        return None
+    
+    async def get_all_active_sessions(self) -> List[Session]:
+        """Get all active sessions across all guilds."""
+        query = """
+            SELECT * FROM sessions 
+            WHERE status = ? 
             ORDER BY created_at DESC
         """
-        rows = await self.db.fetchall(query, (guild_id, SessionStatus.ACTIVE.value))
+        rows = await self.db.fetchall(query, (SessionStatus.ACTIVE.value,))
         sessions = []
         for row in rows:
             data = dict(row)
@@ -259,19 +271,17 @@ class SessionRepository:
         """Update session."""
         query = """
             UPDATE sessions SET
-                session_type = ?, title = ?, description = ?,
-                scheduled_time = ?, start_time = ?, end_time = ?,
-                status = ?, max_participants = ?, current_participants = ?,
-                message_id = ?, channel_id = ?, updated_at = ?
+                server_code = ?, notes = ?, started_at = ?, ended_at = ?,
+                status = ?, session_channel_id = ?, session_message_id = ?,
+                vote_count = ?, boost_count = ?, duration = ?, updated_at = ?
             WHERE id = ?
         """
         session.updated_at = datetime.utcnow()
         await self.db.execute(query, (
-            session.session_type, session.title, session.description,
-            session.scheduled_time, session.start_time, session.end_time,
-            session.status.value, session.max_participants,
-            session.current_participants, session.message_id,
-            session.channel_id, session.updated_at, session.id
+            session.server_code, session.notes, session.started_at, session.ended_at,
+            session.status.value, session.session_channel_id, session.session_message_id,
+            session.vote_count, session.boost_count, session.duration,
+            session.updated_at, session.id
         ))
         return session
     
