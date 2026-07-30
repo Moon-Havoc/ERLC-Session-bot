@@ -502,6 +502,76 @@ def migration_004_rollback(cursor: sqlite3.Cursor) -> None:
     cursor.execute("DROP TABLE IF EXISTS session_votes")
 
 
+def migration_005_add_statistics_audit_tables(cursor: sqlite3.Cursor) -> None:
+    """Add statistics and audit logging tables."""
+    
+    # Host statistics table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS host_statistics (
+            guild_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            sessions_hosted INTEGER DEFAULT 0,
+            total_hosted_time INTEGER DEFAULT 0,
+            total_votes INTEGER DEFAULT 0,
+            total_boosts INTEGER DEFAULT 0,
+            last_hosted TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (guild_id, user_id)
+        )
+    """)
+    
+    # Guild statistics table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS guild_statistics (
+            guild_id INTEGER PRIMARY KEY,
+            total_sessions INTEGER DEFAULT 0,
+            total_hosted_time INTEGER DEFAULT 0,
+            total_votes INTEGER DEFAULT 0,
+            total_boosts INTEGER DEFAULT 0,
+            longest_session INTEGER DEFAULT 0,
+            average_session_length INTEGER DEFAULT 0,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    
+    # Audit log table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            session_id INTEGER,
+            event_type TEXT NOT NULL,
+            user_id INTEGER,
+            timestamp TEXT NOT NULL,
+            metadata TEXT
+        )
+    """)
+    
+    # Create indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_guild ON audit_logs(guild_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_logs(session_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_logs(event_type)")
+
+
+def migration_005_rollback(cursor: sqlite3.Cursor) -> None:
+    """Rollback migration 005 - remove statistics and audit tables."""
+    
+    # Drop indexes
+    cursor.execute("DROP INDEX IF EXISTS idx_audit_event")
+    cursor.execute("DROP INDEX IF EXISTS idx_audit_timestamp")
+    cursor.execute("DROP INDEX IF EXISTS idx_audit_user")
+    cursor.execute("DROP INDEX IF EXISTS idx_audit_session")
+    cursor.execute("DROP INDEX IF EXISTS idx_audit_guild")
+    
+    # Drop tables
+    cursor.execute("DROP TABLE IF EXISTS audit_logs")
+    cursor.execute("DROP TABLE IF EXISTS guild_statistics")
+    cursor.execute("DROP TABLE IF EXISTS host_statistics")
+
+
 def migration_003_rollback(cursor: sqlite3.Cursor) -> None:
     """Rollback migration 003 - restore old session schema."""
     
@@ -592,6 +662,13 @@ def get_migration_runner(db: Database) -> MigrationRunner:
         name="add_vote_boost_tables",
         up=migration_004_add_vote_boost_tables,
         down=migration_004_rollback
+    ))
+    
+    runner.register(Migration(
+        version=5,
+        name="add_statistics_audit_tables",
+        up=migration_005_add_statistics_audit_tables,
+        down=migration_005_rollback
     ))
     
     return runner

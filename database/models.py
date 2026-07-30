@@ -169,6 +169,107 @@ class SessionBoost:
 
 
 @dataclass
+class HostStatistics:
+    """Statistics for a host."""
+    guild_id: int = 0
+    user_id: int = 0
+    sessions_hosted: int = 0
+    total_hosted_time: int = 0  # Total seconds
+    total_votes: int = 0
+    total_boosts: int = 0
+    last_hosted: Optional[datetime] = None
+    created_at: datetime = None
+    updated_at: datetime = None
+    
+    def __post_init__(self) -> None:
+        if self.created_at is None:
+            self.created_at = datetime.utcnow()
+        if self.updated_at is None:
+            self.updated_at = datetime.utcnow()
+    
+    @property
+    def total_hosted_time_str(self) -> str:
+        """Get formatted total hosted time string."""
+        hours, remainder = divmod(self.total_hosted_time, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        elif minutes > 0:
+            return f"{minutes}m"
+        else:
+            return f"{seconds}s"
+
+
+@dataclass
+class GuildStatistics:
+    """Statistics for a guild."""
+    guild_id: int = 0
+    total_sessions: int = 0
+    total_hosted_time: int = 0  # Total seconds
+    total_votes: int = 0
+    total_boosts: int = 0
+    longest_session: int = 0  # Longest session in seconds
+    average_session_length: int = 0  # Average in seconds
+    updated_at: datetime = None
+    
+    def __post_init__(self) -> None:
+        if self.updated_at is None:
+            self.updated_at = datetime.utcnow()
+    
+    @property
+    def total_hosted_time_str(self) -> str:
+        """Get formatted total hosted time string."""
+        hours, remainder = divmod(self.total_hosted_time, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        elif minutes > 0:
+            return f"{minutes}m"
+        else:
+            return f"{seconds}s"
+    
+    @property
+    def longest_session_str(self) -> str:
+        """Get formatted longest session string."""
+        hours, remainder = divmod(self.longest_session, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        elif minutes > 0:
+            return f"{minutes}m"
+        else:
+            return f"{seconds}s"
+    
+    @property
+    def average_session_length_str(self) -> str:
+        """Get formatted average session length string."""
+        hours, remainder = divmod(self.average_session_length, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        elif minutes > 0:
+            return f"{minutes}m"
+        else:
+            return f"{seconds}s"
+
+
+@dataclass
+class AuditLog:
+    """Audit log entry."""
+    id: Optional[int] = None
+    guild_id: int = 0
+    session_id: Optional[int] = None
+    event_type: str = ""
+    user_id: Optional[int] = None
+    timestamp: datetime = None
+    metadata: Optional[str] = None  # JSON string
+    
+    def __post_init__(self) -> None:
+        if self.timestamp is None:
+            self.timestamp = datetime.utcnow()
+
+
+@dataclass
 class SessionParticipant:
     """Participant in a session."""
     id: Optional[int] = None

@@ -336,6 +336,54 @@ Update session embed immediately
 Send ephemeral confirmation
 ```
 
+### Dependency Injection Flow
+
+```
+Bot Startup
+    ↓
+ServiceContainer.initialize()
+    ↓
+Register all services
+    ↓
+Initialize singletons
+    ↓
+Services available via container
+    ↓
+Cogs receive services via injection
+```
+
+### Statistics Update Flow
+
+```
+Session Event (EventService)
+    ↓
+StatisticsService Event Listener
+    ↓
+Update database statistics
+    ↓
+Calculate aggregates (totals, averages)
+    ↓
+Persist changes
+    ↓
+Statistics available for queries
+```
+
+### Audit Logging Flow
+
+```
+Session Event (EventService)
+    ↓
+AuditService Event Listener
+    ↓
+Create audit log entry
+    ↓
+Store event metadata (JSON)
+    ↓
+Persist to database
+    ↓
+Audit trail complete
+```
+
 ### Boost Flow
 
 ```

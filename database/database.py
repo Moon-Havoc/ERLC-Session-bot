@@ -488,6 +488,208 @@ class SessionBoostRepository:
         return await self.db.fetchval(query, (session_id, user_id)) or 0
 
 
+class HostStatisticsRepository:
+    """Repository for host statistics operations."""
+    
+    def __init__(self, db: Database) -> None:
+        self.db = db
+    
+    async def get_or_create(self, guild_id: int, user_id: int) -> HostStatistics:
+        """Get or create host statistics."""
+        query = """
+            SELECT * FROM host_statistics 
+            WHERE guild_id = ? AND user_id = ?
+        """
+        row = await self.db.fetchone(query, (guild_id, user_id))
+        if row:
+            return HostStatistics(**dict(row))
+        
+        # Create new record
+        stats = HostStatistics(guild_id=guild_id, user_id=user_id)
+        return await self.create(stats)
+    
+    async def create(self, stats: HostStatistics) -> HostStatistics:
+        """Create host statistics."""
+        query = """
+            INSERT INTO host_statistics (
+                guild_id, user_id, sessions_hosted, total_hosted_time,
+                total_votes, total_boosts, last_hosted, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        await self.db.execute(query, (
+            stats.guild_id, stats.user_id, stats.sessions_hosted,
+            stats.total_hosted_time, stats.total_votes, stats.total_boosts,
+            stats.last_hosted, stats.created_at, stats.updated_at
+        ))
+        return stats
+    
+    async def update(self, stats: HostStatistics) -> HostStatistics:
+        """Update host statistics."""
+        query = """
+            UPDATE host_statistics SET
+                sessions_hosted = ?, total_hosted_time = ?, total_votes = ?,
+                total_boosts = ?, last_hosted = ?, updated_at = ?
+            WHERE guild_id = ? AND user_id = ?
+        """
+        stats.updated_at = datetime.utcnow()
+        await self.db.execute(query, (
+            stats.sessions_hosted, stats.total_hosted_time, stats.total_votes,
+            stats.total_boosts, stats.last_hosted, stats.updated_at,
+            stats.guild_id, stats.user_id
+        ))
+        return stats
+    
+    async def get(self, guild_id: int, user_id: int) -> Optional[HostStatistics]:
+        """Get host statistics."""
+        query = """
+            SELECT * FROM host_statistics 
+            WHERE guild_id = ? AND user_id = ?
+        """
+        row = await self.db.fetchone(query, (guild_id, user_id))
+        if row:
+            return HostStatistics(**dict(row))
+        return None
+    
+    async def get_top_hosts(self, guild_id: int, limit: int = 10) -> List[HostStatistics]:
+        """Get top hosts by sessions hosted."""
+        query = """
+            SELECT * FROM host_statistics 
+            WHERE guild_id = ? 
+            ORDER BY sessions_hosted DESC, total_hosted_time DESC
+            LIMIT ?
+        """
+        rows = await self.db.fetchall(query, (guild_id, limit))
+        return [HostStatistics(**dict(row)) for row in rows]
+    
+    async def get_all_hosts(self, guild_id: int) -> List[HostStatistics]:
+        """Get all hosts for a guild."""
+        query = "SELECT * FROM host_statistics WHERE guild_id = ?"
+        rows = await self.db.fetchall(query, (guild_id,))
+        return [HostStatistics(**dict(row)) for row in rows]
+
+
+class GuildStatisticsRepository:
+    """Repository for guild statistics operations."""
+    
+    def __init__(self, db: Database) -> None:
+        self.db = db
+    
+    async def get_or_create(self, guild_id: int) -> GuildStatistics:
+        """Get or create guild statistics."""
+        query = "SELECT * FROM guild_statistics WHERE guild_id = ?"
+        row = await self.db.fetchone(query, (guild_id,))
+        if row:
+            return GuildStatistics(**dict(row))
+        
+        # Create new record
+        stats = GuildStatistics(guild_id=guild_id)
+        return await self.create(stats)
+    
+    async def create(self, stats: GuildStatistics) -> GuildStatistics:
+        """Create guild statistics."""
+        query = """
+            INSERT INTO guild_statistics (
+                guild_id, total_sessions, total_hosted_time, total_votes,
+                total_boosts, longest_session, average_session_length, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        await self.db.execute(query, (
+            stats.guild_id, stats.total_sessions, stats.total_hosted_time,
+            stats.total_votes, stats.total_boosts, stats.longest_session,
+            stats.average_session_length, stats.updated_at
+        ))
+        return stats
+    
+    async def update(self, stats: GuildStatistics) -> GuildStatistics:
+        """Update guild statistics."""
+        query = """
+            UPDATE guild_statistics SET
+                total_sessions = ?, total_hosted_time = ?, total_votes = ?,
+                total_boosts = ?, longest_session = ?, average_session_length = ?, updated_at = ?
+            WHERE guild_id = ?
+        """
+        stats.updated_at = datetime.utcnow()
+        await self.db.execute(query, (
+            stats.total_sessions, stats.total_hosted_time, stats.total_votes,
+            stats.total_boosts, stats.longest_session, stats.average_session_length,
+            stats.updated_at, stats.guild_id
+        ))
+        return stats
+    
+    async def get(self, guild_id: int) -> Optional[GuildStatistics]:
+        """Get guild statistics."""
+        query = "SELECT * FROM guild_statistics WHERE guild_id = ?"
+        row = await self.db.fetchone(query, (guild_id,))
+        if row:
+            return GuildStatistics(**dict(row))
+        return None
+
+
+class AuditLogRepository:
+    """Repository for audit log operations."""
+    
+    def __init__(self, db: Database) -> None:
+        self.db = db
+    
+    async def create(self, log: AuditLog) -> AuditLog:
+        """Create audit log entry."""
+        query = """
+            INSERT INTO audit_logs (
+                guild_id, session_id, event_type, user_id, timestamp, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        """
+        cursor = await self.db.execute(query, (
+            log.guild_id, log.session_id, log.event_type, log.user_id,
+            log.timestamp, log.metadata
+        ))
+        log.id = cursor.lastrowid
+        return log
+    
+    async def get_by_session(self, session_id: int, limit: int = 100) -> List[AuditLog]:
+        """Get audit logs for a session."""
+        query = """
+            SELECT * FROM audit_logs 
+            WHERE session_id = ? 
+            ORDER BY timestamp DESC 
+            LIMIT ?
+        """
+        rows = await self.db.fetchall(query, (session_id, limit))
+        return [AuditLog(**dict(row)) for row in rows]
+    
+    async def get_by_user(self, guild_id: int, user_id: int, limit: int = 100) -> List[AuditLog]:
+        """Get audit logs for a user."""
+        query = """
+            SELECT * FROM audit_logs 
+            WHERE guild_id = ? AND user_id = ? 
+            ORDER BY timestamp DESC 
+            LIMIT ?
+        """
+        rows = await self.db.fetchall(query, (guild_id, user_id, limit))
+        return [AuditLog(**dict(row)) for row in rows]
+    
+    async def get_by_guild(self, guild_id: int, limit: int = 100) -> List[AuditLog]:
+        """Get audit logs for a guild."""
+        query = """
+            SELECT * FROM audit_logs 
+            WHERE guild_id = ? 
+            ORDER BY timestamp DESC 
+            LIMIT ?
+        """
+        rows = await self.db.fetchall(query, (guild_id, limit))
+        return [AuditLog(**dict(row)) for row in rows]
+    
+    async def get_by_event_type(self, guild_id: int, event_type: str, limit: int = 100) -> List[AuditLog]:
+        """Get audit logs by event type."""
+        query = """
+            SELECT * FROM audit_logs 
+            WHERE guild_id = ? AND event_type = ? 
+            ORDER BY timestamp DESC 
+            LIMIT ?
+        """
+        rows = await self.db.fetchall(query, (guild_id, event_type, limit))
+        return [AuditLog(**dict(row)) for row in rows]
+
+
 class BoostRepository:
     """Repository for boost operations."""
     

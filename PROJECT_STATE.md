@@ -46,6 +46,10 @@ The core framework architecture is complete and operational. The project provide
 - **Server Admin Override**: Server administrators always have access
 
 ### ✅ Services Layer
+- **ServiceContainer**: Lightweight dependency injection container
+  - Manages all long-lived services as singletons
+  - Automatic initialization and shutdown
+  - Easy service registration for future services
 - **ConfigService**: Configuration management with caching
 - **BrandingService**: Branding and embed creation
 - **SessionService**: Complete session lifecycle management
@@ -58,6 +62,15 @@ The core framework architecture is complete and operational. The project provide
   - Lightweight, no third-party dependencies
   - Event listeners with priority support
   - Events: session_started, session_ended, vote_added, boost_added
+- **StatisticsService**: Event-driven statistics tracking
+  - Host statistics: sessions hosted, total time, votes, boosts
+  - Guild statistics: total sessions, total time, longest session, average length
+  - Automatic updates from event listeners
+  - Leaderboard calculation methods
+- **AuditService**: Complete audit logging
+  - Records all session events with metadata
+  - Query by guild, session, user, or event type
+  - JSON metadata storage for flexibility
 - **StatsService**: Statistics tracking foundation
 - **APIService**: Optional external API integration with auto-disable
 
@@ -73,7 +86,11 @@ The core framework architecture is complete and operational. The project provide
   - `/session info` - Display active session information
   - `/session vote` - Vote for the active session
   - `/session boost [note]` - Boost the active session
-- **Stats Cog**: Structure ready for statistics commands
+- **Stats Cog**: Complete statistics and leaderboard commands
+  - `/stats session` - Display current session statistics
+  - `/stats server` - Display server-wide statistics
+  - `/stats host [user]` - Display host statistics (or your own)
+  - `/leaderboard hosts` - Display top hosts leaderboard
 - **Utility Cog**: General utility commands (ping, info, help, invite, website, avatar, server, user)
 
 ### ✅ Utilities Layer
@@ -89,14 +106,14 @@ The core framework architecture is complete and operational. The project provide
 
 ## In Progress
 
-### 🚧 Voting and Boost System
+### 🚧 Statistics, Leaderboards, and Audit Logging
 - **Status**: Core implementation complete
-- **Features**: Event-driven architecture, vote/boost tracking, immediate embed updates
-- **Commands**: `/session vote`, `/session boost [note]`
-- **Event System**: Internal pub/sub for session_started, session_ended, vote_added, boost_added
-- **Database**: SessionVote and SessionBoost tables with proper constraints
-- **Permissions**: Available to all members who can view session channel
-- **Validation**: Duplicate vote prevention, multiple boosts allowed
+- **Features**: Event-driven statistics, host/guild stats, audit logging, leaderboards
+- **ServiceContainer**: Dependency injection for all services
+- **Commands**: `/stats session`, `/stats server`, `/stats host [user]`, `/leaderboard hosts`
+- **Database**: HostStatistics, GuildStatistics, AuditLog tables
+- **Event Listeners**: Automatic statistics updates from session events
+- **Audit Service**: Complete audit trail of all session events
 
 ## Not Started
 

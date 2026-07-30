@@ -5,6 +5,68 @@ All notable changes to SessionCore will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-30
+
+### Added
+- ServiceContainer: Lightweight dependency injection container for all services
+  - Singleton pattern for long-lived services
+  - Automatic initialization and shutdown
+  - Easy service registration for future services
+- StatisticsService: Event-driven statistics tracking
+  - Host statistics: sessions hosted, total time, votes, boosts
+  - Guild statistics: total sessions, total time, longest session, average length
+  - Automatic updates from event listeners
+  - Leaderboard calculation methods
+- AuditService: Complete audit logging
+  - Records all session events with metadata
+  - Query by guild, session, user, or event type
+  - JSON metadata storage for flexibility
+- Database migration 005 for statistics and audit tables
+- HostStatistics model with formatted time properties
+- GuildStatistics model with aggregate calculations
+- AuditLog model with JSON metadata storage
+- Statistics commands: `/stats session`, `/stats server`, `/stats host [user]`
+- Leaderboard commands: `/leaderboard hosts`
+- Event listeners for automatic statistics updates
+- Event listeners for complete audit logging
+- HostStatisticsRepository and GuildStatisticsRepository
+- AuditLogRepository with multiple query methods
+- Medal formatting for leaderboards (🥇🥈🥉)
+- Service injection into bot initialization
+
+### Changed
+- Bot initialization now uses ServiceContainer
+- Statistics and audit services automatically initialize on startup
+- StatisticsService replaces StatsService (foundation)
+- All services now managed by ServiceContainer
+- Event listeners automatically registered on service initialization
+
+### Fixed
+- Statistics automatically update from events
+- SessionService no longer directly modifies statistics
+- Leaderboards calculate correctly from database
+- Audit logs record every published event
+- Multiple guilds remain isolated
+
+### Security
+- Statistics viewing available to all members
+- No special permissions required for statistics
+- Audit logs designed for future permission controls
+
+### Database
+- Migration 005: Added host_statistics, guild_statistics, audit_logs tables
+- HostStatistics: guild_id, user_id, sessions_hosted, total_hosted_time, total_votes, total_boosts, last_hosted
+- GuildStatistics: guild_id, total_sessions, total_hosted_time, total_votes, total_boosts, longest_session, average_session_length
+- AuditLog: guild_id, session_id, event_type, user_id, timestamp, metadata (JSON)
+- Indexes on audit_logs for performance
+- PRIMARY KEY on (guild_id, user_id) for host_statistics
+
+### Architecture
+- Dependency injection pattern for service management
+- Event-driven statistics and audit logging
+- Single source of truth for all statistics
+- Future-proof design for API integration
+
 ## [1.2.0] - 2026-07-30
 
 ### Added

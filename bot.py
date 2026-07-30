@@ -7,6 +7,11 @@ from discord.ext import commands
 
 from config import config
 from database import database, get_migration_runner
+from services import (
+    ConfigService, BrandingService, SessionService,
+    StatisticsService, AuditService,
+    initialize_container, get_container
+)
 from utils import get_logger
 
 logger = get_logger(__name__)
@@ -38,6 +43,10 @@ class SessionCoreBot(commands.Bot):
         """Called when the bot is setting up."""
         logger.info("Setting up bot...")
         
+        # Initialize service container
+        initialize_container()
+        container = get_container()
+        
         # Initialize database
         await database.initialize()
         logger.info("Database initialized")
@@ -47,15 +56,26 @@ class SessionCoreBot(commands.Bot):
         await migration_runner.migrate()
         logger.info("Database migrations completed")
         
+        # Initialize statistics and audit services
+        statistics_service = container.get_singleton('statistics_service')
+        if statistics_service:
+            await statistics_service.initialize()
+            logger.info("Statistics service initialized")
+        
+        audit_service = container.get_singleton('audit_service')
+        if audit_service:
+            await audit_service.initialize()
+            logger.info("Audit service initialized")
+        
         # Load cogs
         await self.load_cogs()
         logger.info("Cogs loaded")
         
         # Restore active sessions
-        from services import SessionService
-        session_service = SessionService()
-        await session_service.restore_sessions()
-        logger.info("Active sessions restored")
+        session_service = container.get_singleton('session_service')
+        if session_service:
+            await session_service.restore_sessions()
+            logger.info("Active sessions restored")
     
     async def load_cogs(self) -> None:
         """Load all bot cogs."""
