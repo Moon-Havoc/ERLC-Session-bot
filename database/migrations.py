@@ -287,6 +287,115 @@ def migration_001_rollback(cursor: sqlite3.Cursor) -> None:
     cursor.execute("DROP TABLE IF EXISTS guild_config")
 
 
+def migration_002_merge_branding_to_guild_config(cursor: sqlite3.Cursor) -> None:
+    """Merge branding fields into guild_config table."""
+    
+    # Add branding columns to guild_config
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN community_name TEXT DEFAULT 'Community'
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN community_description TEXT
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN logo_url TEXT
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN embed_color INTEGER DEFAULT 5865F2
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN footer_text TEXT
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN footer_icon_url TEXT
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN community_emoji TEXT
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN website_url TEXT
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN discord_invite TEXT
+    """)
+    
+    # Add management role
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN management_role_id INTEGER
+    """)
+    
+    # Rename log_channel_id to logs_channel_id for consistency
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN logs_channel_id INTEGER
+    """)
+    
+    # Add timezone and API settings
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN timezone TEXT DEFAULT 'UTC'
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN api_enabled BOOLEAN DEFAULT 0
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN api_url TEXT
+    """)
+    cursor.execute("""
+        ALTER TABLE guild_config ADD COLUMN api_key TEXT
+    """)
+    
+    # Migrate existing branding data to guild_config
+    cursor.execute("""
+        UPDATE guild_config 
+        SET community_name = (SELECT community_name FROM branding WHERE branding.guild_id = guild_config.guild_id),
+            community_description = (SELECT description FROM branding WHERE branding.guild_id = guild_config.guild_id),
+            logo_url = (SELECT logo_url FROM branding WHERE branding.guild_id = guild_config.guild_id),
+            embed_color = (SELECT embed_color FROM branding WHERE branding.guild_id = guild_config.guild_id),
+            footer_text = (SELECT footer_text FROM branding WHERE branding.guild_id = guild_config.guild_id),
+            footer_icon_url = (SELECT footer_icon_url FROM branding WHERE branding.guild_id = guild_config.guild_id),
+            community_emoji = (SELECT custom_emoji FROM branding WHERE branding.guild_id = guild_config.guild_id),
+            website_url = (SELECT website_url FROM branding WHERE branding.guild_id = guild_config.guild_id),
+            discord_invite = (SELECT invite_link FROM branding WHERE branding.guild_id = guild_config.guild_id)
+        WHERE EXISTS (SELECT 1 FROM branding WHERE branding.guild_id = guild_config.guild_id)
+    """)
+    
+    # Set default community name for guilds without branding
+    cursor.execute("""
+        UPDATE guild_config SET community_name = 'Community' WHERE community_name IS NULL
+    """)
+
+
+def migration_002_rollback(cursor: sqlite3.Cursor) -> None:
+    """Rollback migration 002 - cannot be fully rolled back due to ALTER TABLE limitations."""
+    
+    # SQLite doesn't support dropping columns, so we need to recreate the table
+    cursor.execute("""
+        CREATE TABLE guild_config_backup (
+            guild_id INTEGER PRIMARY KEY,
+            admin_role_id INTEGER,
+            moderator_role_id INTEGER,
+            host_role_id INTEGER,
+            member_role_id INTEGER,
+            log_channel_id INTEGER,
+            session_channel_id INTEGER,
+            welcome_channel_id INTEGER,
+            auto_role_enabled BOOLEAN DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    
+    cursor.execute("""
+        INSERT INTO guild_config_backup 
+        SELECT guild_id, admin_role_id, moderator_role_id, host_role_id, member_role_id,
+               log_channel_id, session_channel_id, welcome_channel_id, auto_role_enabled,
+               created_at, updated_at
+        FROM guild_config
+    """)
+    
+    cursor.execute("DROP TABLE guild_config")
+    cursor.execute("ALTER TABLE guild_config_backup RENAME TO guild_config")
+
+
 # Register migrations
 def get_migration_runner(db: Database) -> MigrationRunner:
     """Get configured migration runner."""
@@ -298,6 +407,13 @@ def get_migration_runner(db: Database) -> MigrationRunner:
         name="create_initial_tables",
         up=migration_001_create_tables,
         down=migration_001_rollback
+    ))
+    
+    runner.register(Migration(
+        version=2,
+        name="merge_branding_to_guild_config",
+        up=migration_002_merge_branding_to_guild_config,
+        down=migration_002_rollback
     ))
     
     return runner

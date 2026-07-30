@@ -78,13 +78,11 @@ class SessionCoreBot(commands.Bot):
         logger.info(f"Joined guild: {guild.name} (ID: {guild.id})")
         
         # Create default configuration for new guild
-        from services import ConfigService, BrandingService
+        from services import ConfigService
         config_service = ConfigService()
-        branding_service = BrandingService()
         
         try:
-            await config_service.create_guild_config(guild.id)
-            await branding_service.create_branding(guild.id, guild.name)
+            await config_service.ensure_guild_config(guild.id, guild.name)
             logger.info(f"Created default configuration for guild {guild.id}")
         except Exception as e:
             logger.error(f"Failed to create default configuration for guild {guild.id}: {e}")

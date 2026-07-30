@@ -70,30 +70,111 @@ DATABASE_PATH=sessioncore.db
 python bot.py
 ```
 
-2. In your Discord server, run:
-```
-/config setup
-```
+2. The bot will automatically create default configuration when it joins your server.
 
-This initializes the server configuration and default branding.
+3. Configure your server using the commands below. Only Server Administrators or users with the configured Admin role can modify configuration.
 
-3. Configure roles:
-```
-/config roles @AdminRole @ModeratorRole @HostRole @MemberRole
-```
+## Configuration Commands
 
-4. Configure channels:
+### View Configuration
 ```
-/config channels #log-channel #session-channel #welcome-channel
+/config
 ```
+Displays the current server configuration including roles, channels, and branding settings.
 
-5. Customize branding:
+### Branding Commands
 ```
-/branding name "Your Community Name"
-/branding description "Your community description"
-/branding color #5865F2
-/branding logo https://example.com/logo.png
+/branding setname <name>
 ```
+Set the community name (max 100 characters).
+
+```
+/branding setdescription <description>
+```
+Set the community description (max 500 characters).
+
+```
+/branding setlogo <url>
+```
+Set the logo URL (must be a valid URL).
+
+```
+/branding setcolor <hex_color>
+```
+Set the embed color (hex format: #RRGGBB or 0xRRGGBB).
+
+```
+/branding setfooter <text>
+```
+Set the footer text (max 200 characters).
+
+```
+/branding setfootericon <url>
+```
+Set the footer icon URL (must be a valid URL).
+
+```
+/branding setwebsite <url>
+```
+Set the website URL (must be a valid URL).
+
+```
+/branding setinvite <url>
+```
+Set the Discord invite link (must be a valid URL).
+
+```
+/branding setemoji <emoji>
+```
+Set the custom emoji (max 50 characters).
+
+### Channel Commands
+```
+/channel session <channel>
+```
+Set the session channel where session announcements will be posted.
+
+```
+/channel logs <channel>
+```
+Set the logs channel for bot activity logs.
+
+### Role Commands
+```
+/roles admin <role>
+```
+Set the admin role (members with this role can modify configuration).
+
+```
+/roles management <role>
+```
+Set the management role for server management.
+
+```
+/roles host <role>
+```
+Set the host role for session hosts.
+
+```
+/roles moderator <role>
+```
+Set the moderator role for content moderation.
+
+## Required Permissions
+
+The bot requires the following Discord permissions:
+
+- **Administrator**: For initial setup and configuration
+- **Manage Channels**: To set session and log channels
+- **Manage Roles**: To configure permission roles
+- **Send Messages**: To respond to commands
+- **Embed Links**: To send branded embeds
+- **Read Message History**: For command context
+- **Add Reactions**: For interactive components
+
+## Configuration Persistence
+
+All configuration is stored in the SQLite database and persists across bot restarts. Changes to branding are immediately reflected in all new embeds due to automatic cache invalidation.
 
 ## Usage
 

@@ -76,16 +76,23 @@ class GuildConfigRepository:
         """Create a new guild configuration."""
         query = """
             INSERT INTO guild_config (
-                guild_id, admin_role_id, moderator_role_id, host_role_id,
-                member_role_id, log_channel_id, session_channel_id,
-                welcome_channel_id, auto_role_enabled, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                guild_id, community_name, community_description, logo_url, embed_color,
+                footer_text, footer_icon_url, community_emoji, website_url, discord_invite,
+                session_channel_id, logs_channel_id, welcome_channel_id,
+                admin_role_id, management_role_id, host_role_id, moderator_role_id, member_role_id,
+                timezone, auto_role_enabled, api_enabled, api_url, api_key,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         await self.db.execute(query, (
-            config.guild_id, config.admin_role_id, config.moderator_role_id,
-            config.host_role_id, config.member_role_id, config.log_channel_id,
-            config.session_channel_id, config.welcome_channel_id,
-            config.auto_role_enabled, config.created_at, config.updated_at
+            config.guild_id, config.community_name, config.community_description,
+            config.logo_url, config.embed_color, config.footer_text, config.footer_icon_url,
+            config.community_emoji, config.website_url, config.discord_invite,
+            config.session_channel_id, config.logs_channel_id, config.welcome_channel_id,
+            config.admin_role_id, config.management_role_id, config.host_role_id,
+            config.moderator_role_id, config.member_role_id, config.timezone,
+            config.auto_role_enabled, config.api_enabled, config.api_url, config.api_key,
+            config.created_at, config.updated_at
         ))
         return config
     
@@ -101,16 +108,21 @@ class GuildConfigRepository:
         """Update guild configuration."""
         query = """
             UPDATE guild_config SET
-                admin_role_id = ?, moderator_role_id = ?, host_role_id = ?,
-                member_role_id = ?, log_channel_id = ?, session_channel_id = ?,
-                welcome_channel_id = ?, auto_role_enabled = ?, updated_at = ?
+                community_name = ?, community_description = ?, logo_url = ?, embed_color = ?,
+                footer_text = ?, footer_icon_url = ?, community_emoji = ?, website_url = ?, discord_invite = ?,
+                session_channel_id = ?, logs_channel_id = ?, welcome_channel_id = ?,
+                admin_role_id = ?, management_role_id = ?, host_role_id = ?, moderator_role_id = ?, member_role_id = ?,
+                timezone = ?, auto_role_enabled = ?, api_enabled = ?, api_url = ?, api_key = ?, updated_at = ?
             WHERE guild_id = ?
         """
         config.updated_at = datetime.utcnow()
         await self.db.execute(query, (
-            config.admin_role_id, config.moderator_role_id, config.host_role_id,
-            config.member_role_id, config.log_channel_id, config.session_channel_id,
-            config.welcome_channel_id, config.auto_role_enabled,
+            config.community_name, config.community_description, config.logo_url, config.embed_color,
+            config.footer_text, config.footer_icon_url, config.community_emoji, config.website_url, config.discord_invite,
+            config.session_channel_id, config.logs_channel_id, config.welcome_channel_id,
+            config.admin_role_id, config.management_role_id, config.host_role_id,
+            config.moderator_role_id, config.member_role_id, config.timezone,
+            config.auto_role_enabled, config.api_enabled, config.api_url, config.api_key,
             config.updated_at, config.guild_id
         ))
         return config

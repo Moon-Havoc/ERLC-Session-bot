@@ -1,161 +1,193 @@
-"""Branding service for community customization."""
+"""Branding service for community customization with embed helpers."""
+
+from __future__ import annotations
 
 from typing import Optional
 import discord
 
-from database import Branding, BrandingRepository, database
+from database import GuildConfig
+from services.config_service import ConfigService
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 class BrandingService:
-    """Service for managing community branding."""
+    """Service for managing community branding and creating branded embeds."""
     
     def __init__(self) -> None:
         """Initialize branding service."""
-        self.repository = BrandingRepository(database)
+        self.config_service = ConfigService()
     
-    async def get_branding(self, guild_id: int) -> Optional[Branding]:
-        """Get branding by guild ID."""
-        try:
-            return await self.repository.get_by_guild(guild_id)
-        except Exception as e:
-            logger.error(f"Error getting branding for {guild_id}: {e}")
-            return None
+    async def get_branding_config(self, guild_id: int) -> Optional[GuildConfig]:
+        """Get guild configuration which contains branding settings."""
+        return await self.config_service.get_guild_config(guild_id)
     
-    async def create_branding(
+    async def create_embed(
         self,
         guild_id: int,
-        community_name: str,
+        title: str,
         description: Optional[str] = None,
-        logo_url: Optional[str] = None,
-        embed_color: int = 0x5865F2,
+        color: Optional[int] = None,
+        fields: Optional[list] = None,
         footer_text: Optional[str] = None,
-        footer_icon_url: Optional[str] = None,
-        custom_emoji: Optional[str] = None,
-        website_url: Optional[str] = None,
-        invite_link: Optional[str] = None
-    ) -> Optional[Branding]:
-        """Create new branding configuration."""
-        try:
-            branding = Branding(
-                guild_id=guild_id,
-                community_name=community_name,
-                description=description,
-                logo_url=logo_url,
-                embed_color=embed_color,
-                footer_text=footer_text,
-                footer_icon_url=footer_icon_url,
-                custom_emoji=custom_emoji,
-                website_url=website_url,
-                invite_link=invite_link
+        footer_icon: Optional[str] = None,
+        thumbnail: Optional[str] = None,
+        image: Optional[str] = None,
+        author: Optional[dict] = None,
+        timestamp: bool = True
+    ) -> discord.Embed:
+        """Create a branded Discord embed using guild configuration."""
+        config = await self.get_branding_config(guild_id)
+        
+        # Use branding color if provided, otherwise use default
+        embed_color = color or (config.embed_color if config else 0x5865F2)
+        
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=embed_color
+        )
+        
+        # Add fields if provided
+        if fields:
+            for field in fields:
+                if len(field) >= 3:
+                    embed.add_field(name=field[0], value=field[1], inline=field[2])
+                else:
+                    embed.add_field(name=field[0], value=field[1], inline=False)
+        
+        # Set footer
+        footer = footer_text or (config.footer_text if config else None)
+        footer_icon_url = footer_icon or (config.footer_icon_url if config else None)
+        
+        if footer:
+            embed.set_footer(text=footer, icon_url=footer_icon_url)
+        
+        # Set thumbnail
+        thumbnail_url = thumbnail or (config.logo_url if config else None)
+        if thumbnail_url:
+            embed.set_thumbnail(url=thumbnail_url)
+        
+        # Set image
+        if image:
+            embed.set_image(url=image)
+        
+        # Set author
+        if author:
+            embed.set_author(
+                name=author.get('name'),
+                url=author.get('url'),
+                icon_url=author.get('icon_url')
             )
-            return await self.repository.create(branding)
-        except Exception as e:
-            logger.error(f"Error creating branding for {guild_id}: {e}")
-            return None
+        
+        # Set timestamp
+        if timestamp:
+            embed.timestamp = discord.utils.utcnow()
+        
+        return embed
     
-    async def update_branding(
+    async def success_embed(
         self,
         guild_id: int,
-        community_name: Optional[str] = None,
+        title: str,
+        description: Optional[str] = None
+    ) -> discord.Embed:
+        """Create a success embed (green)."""
+        return await self.create_embed(
+            guild_id,
+            title=title,
+            description=description,
+            color=0x57F287  # Discord green
+        )
+    
+    async def error_embed(
+        self,
+        guild_id: int,
+        title: str,
+        description: Optional[str] = None
+    ) -> discord.Embed:
+        """Create an error embed (red)."""
+        return await self.create_embed(
+            guild_id,
+            title=title,
+            description=description,
+            color=0xED4245  # Discord red
+        )
+    
+    async def warning_embed(
+        self,
+        guild_id: int,
+        title: str,
+        description: Optional[str] = None
+    ) -> discord.Embed:
+        """Create a warning embed (yellow)."""
+        return await self.create_embed(
+            guild_id,
+            title=title,
+            description=description,
+            color=0xFEE75C  # Discord yellow
+        )
+    
+    async def info_embed(
+        self,
+        guild_id: int,
+        title: str,
+        description: Optional[str] = None
+    ) -> discord.Embed:
+        """Create an info embed (blue)."""
+        return await self.create_embed(
+            guild_id,
+            title=title,
+            description=description,
+            color=0x5865F2  # Discord blurple
+        )
+    
+    async def session_embed(
+        self,
+        guild_id: int,
+        session_title: str,
+        session_type: str,
+        host_name: str,
         description: Optional[str] = None,
-        logo_url: Optional[str] = None,
-        embed_color: Optional[int] = None,
-        footer_text: Optional[str] = None,
-        footer_icon_url: Optional[str] = None,
-        custom_emoji: Optional[str] = None,
-        website_url: Optional[str] = None,
-        invite_link: Optional[str] = None
-    ) -> Optional[Branding]:
-        """Update branding configuration."""
-        try:
-            branding = await self.repository.get_by_guild(guild_id)
-            if not branding:
-                logger.warning(f"Branding not found for {guild_id}")
-                return None
-            
-            # Update only provided fields
-            if community_name is not None:
-                branding.community_name = community_name
-            if description is not None:
-                branding.description = description
-            if logo_url is not None:
-                branding.logo_url = logo_url
-            if embed_color is not None:
-                branding.embed_color = embed_color
-            if footer_text is not None:
-                branding.footer_text = footer_text
-            if footer_icon_url is not None:
-                branding.footer_icon_url = footer_icon_url
-            if custom_emoji is not None:
-                branding.custom_emoji = custom_emoji
-            if website_url is not None:
-                branding.website_url = website_url
-            if invite_link is not None:
-                branding.invite_link = invite_link
-            
-            return await self.repository.update(branding)
-        except Exception as e:
-            logger.error(f"Error updating branding for {guild_id}: {e}")
-            return None
+        scheduled_time: Optional[str] = None,
+        participant_count: int = 0,
+        max_participants: Optional[int] = None
+    ) -> discord.Embed:
+        """Create a session-specific embed."""
+        fields = [
+            ("Host", host_name, True),
+            ("Type", session_type, True),
+            ("Participants", f"{participant_count}{f'/{max_participants}' if max_participants else ''}", True)
+        ]
+        
+        if scheduled_time:
+            fields.append(("Scheduled Time", scheduled_time, False))
+        
+        return await self.create_embed(
+            guild_id,
+            title=session_title,
+            description=description,
+            fields=fields
+        )
     
-    async def delete_branding(self, guild_id: int) -> bool:
-        """Delete branding configuration."""
-        try:
-            return await self.repository.delete(guild_id)
-        except Exception as e:
-            logger.error(f"Error deleting branding for {guild_id}: {e}")
-            return False
-    
-    async def ensure_branding(
+    async def stats_embed(
         self,
         guild_id: int,
-        community_name: str = "Community"
-    ) -> Branding:
-        """Ensure branding exists, create with defaults if not."""
-        branding = await self.get_branding(guild_id)
-        if not branding:
-            logger.info(f"Creating default branding for guild {guild_id}")
-            branding = await self.create_branding(guild_id, community_name)
-        return branding
-    
-    async def set_community_name(self, guild_id: int, name: str) -> Optional[Branding]:
-        """Set community name."""
-        return await self.update_branding(guild_id, community_name=name)
-    
-    async def set_description(self, guild_id: int, description: str) -> Optional[Branding]:
-        """Set community description."""
-        return await self.update_branding(guild_id, description=description)
-    
-    async def set_logo_url(self, guild_id: int, url: str) -> Optional[Branding]:
-        """Set logo URL."""
-        return await self.update_branding(guild_id, logo_url=url)
-    
-    async def set_embed_color(self, guild_id: int, color: int) -> Optional[Branding]:
-        """Set embed color."""
-        return await self.update_branding(guild_id, embed_color=color)
-    
-    async def set_footer_text(self, guild_id: int, text: str) -> Optional[Branding]:
-        """Set footer text."""
-        return await self.update_branding(guild_id, footer_text=text)
-    
-    async def set_footer_icon(self, guild_id: int, url: str) -> Optional[Branding]:
-        """Set footer icon URL."""
-        return await self.update_branding(guild_id, footer_icon_url=url)
-    
-    async def set_custom_emoji(self, guild_id: int, emoji: str) -> Optional[Branding]:
-        """Set custom emoji."""
-        return await self.update_branding(guild_id, custom_emoji=emoji)
-    
-    async def set_website_url(self, guild_id: int, url: str) -> Optional[Branding]:
-        """Set website URL."""
-        return await self.update_branding(guild_id, website_url=url)
-    
-    async def set_invite_link(self, guild_id: int, url: str) -> Optional[Branding]:
-        """Set invite link."""
-        return await self.update_branding(guild_id, invite_link=url)
+        user_name: str,
+        stats: dict
+    ) -> discord.Embed:
+        """Create a statistics embed."""
+        fields = [
+            (stat_name, str(stat_value), True)
+            for stat_name, stat_value in stats.items()
+        ]
+        
+        return await self.create_embed(
+            guild_id,
+            title=f"Statistics for {user_name}",
+            fields=fields
+        )
     
     def parse_color(self, color_string: str) -> Optional[int]:
         """Parse color string to integer."""
@@ -170,3 +202,15 @@ class BrandingService:
         except (ValueError, AttributeError):
             logger.warning(f"Invalid color string: {color_string}")
             return None
+    
+    def validate_url(self, url: str) -> bool:
+        """Validate URL format."""
+        if not url:
+            return True  # Empty URLs are allowed (optional fields)
+        
+        try:
+            from urllib.parse import urlparse
+            result = urlparse(url)
+            return all([result.scheme, result.netloc])
+        except Exception:
+            return False
