@@ -45,7 +45,42 @@ The core framework architecture is complete and operational. The project provide
 - **Automatic Checks**: Decorator-based permission validation
 - **Server Admin Override**: Server administrators always have access
 
-### ✅ Services Layer
+### ✅ Statistics, Leaderboards, and Audit Logging
+- **ServiceContainer**: Lightweight dependency injection container
+  - Manages all long-lived services as singletons
+  - Automatic initialization and shutdown
+  - Easy service registration for future services
+- **StatisticsService**: Event-driven statistics tracking
+  - Host statistics: sessions hosted, total time, votes, boosts
+  - Guild statistics: total sessions, total time, longest session, average length
+  - Automatic updates from event listeners
+  - Leaderboard calculation methods
+- **AuditService**: Complete audit logging
+  - Records all session events with metadata
+  - Query by guild, session, user, or event type
+  - JSON metadata storage for flexibility
+  - Complete audit trail
+- **Database Schema**: Migration 005 for statistics and audit tables
+  - HostStatistics: guild_id, user_id, sessions_hosted, total_hosted_time, total_votes, total_boosts
+  - GuildStatistics: guild_id, total_sessions, total_hosted_time, total_votes, total_boosts, longest_session, average_session_length
+  - AuditLog: guild_id, session_id, event_type, user_id, timestamp, metadata (JSON)
+- **Statistics Commands**: `/stats session`, `/stats server`, `/stats host [user]`
+  - Available to all members
+  - Shows session, server, and host statistics
+  - Optional user parameter for host stats
+- **Leaderboard Commands**: `/leaderboard hosts`
+  - Top 10 hosts by sessions hosted
+  - Medal formatting (🥇🥈🥉)
+  - Shows sessions and total time
+- **Event Listeners**: Automatic statistics updates
+  - session_started: Updates host session count and last hosted
+  - session_ended: Updates host time, guild totals, longest session, average
+  - vote_added: Updates guild vote count
+  - boost_added: Updates guild boost count
+- **Audit Logging**: All events automatically logged
+  - session_started, session_ended, vote_added, boost_added
+  - Complete metadata for each event
+  - Queryable by multiple criteria
 - **ServiceContainer**: Lightweight dependency injection container
   - Manages all long-lived services as singletons
   - Automatic initialization and shutdown
@@ -106,14 +141,14 @@ The core framework architecture is complete and operational. The project provide
 
 ## In Progress
 
-### 🚧 Statistics, Leaderboards, and Audit Logging
+### 🚧 Interactive Session UI
 - **Status**: Core implementation complete
-- **Features**: Event-driven statistics, host/guild stats, audit logging, leaderboards
-- **ServiceContainer**: Dependency injection for all services
-- **Commands**: `/stats session`, `/stats server`, `/stats host [user]`, `/leaderboard hosts`
-- **Database**: HostStatistics, GuildStatistics, AuditLog tables
-- **Event Listeners**: Automatic statistics updates from session events
-- **Audit Service**: Complete audit trail of all session events
+- **Features**: Persistent Discord Views, session controls, buttons, modals, confirmation dialogs
+- **Session Controls**: Vote, Boost, Refresh, Info buttons on session embeds
+- **Boost Modal**: Optional note input for boosts
+- **Confirmation Dialog**: Prevents accidental session termination
+- **Persistent Views**: Automatic restoration on bot restart
+- **View Manager**: Centralized management of persistent views
 
 ## Not Started
 

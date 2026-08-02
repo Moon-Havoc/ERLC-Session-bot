@@ -8,6 +8,7 @@ from discord.ext import commands
 
 from services import SessionService, ConfigService, BrandingService
 from utils import get_logger
+from utils.views import SessionControlsView, SessionEndConfirmView, persistent_view_manager
 
 logger = get_logger(__name__)
 
@@ -127,9 +128,32 @@ class Session(commands.Cog):
                 await ctx.send(embed=embed)
                 return
             
-            # Create and send session embed
+            # Create and send session embed with controls
             embed = await self._create_session_embed(ctx.guild.id, session)
-            message = await session_channel.send(embed=embed)
+            
+            # Create persistent view for session controls
+            view = SessionControlsView(
+                guild_id=ctx.guild.id,
+                session_id=session.id,
+                session_service=self.session_service,
+                branding_service=self.branding_service,
+                config_service=self.config_service,
+                embed_callback=self._create_session_embed
+            )
+            
+            message = await session_channel.send(embed=embed, view=view)
+            
+            # Register persistent view
+            persistent_view_manager.register_view(
+                view.custom_id,
+                view,
+                metadata={
+                    "guild_id": ctx.guild.id,
+                    "session_id": session.id,
+                    "message_id": message.id,
+                    "channel_id": session_channel.id
+                }
+            )
             
             # Update session with message ID
             await self.session_service.update_session_message(
@@ -160,7 +184,7 @@ class Session(commands.Cog):
     @session_group.command(name="end")
     @commands.guild_only()
     async def session_end(self, ctx: commands.Context) -> None:
-        """End the active session."""
+        """End the active session with confirmation."""
         if not self._check_permissions(ctx):
             embed = await self.branding_service.error_embed(
                 ctx.guild.id,
@@ -182,60 +206,28 @@ class Session(commands.Cog):
             return
         
         try:
-            # End session
-            ended_session = await self.session_service.end_session(ctx.guild.id)
-            if not ended_session:
-                embed = await self.branding_service.error_embed(
-                    ctx.guild.id,
-                    title="Session End Failed",
-                    description="Failed to end session. Please try again."
-                )
-                await ctx.send(embed=embed)
-                return
-            
-            # Update original session embed
-            if ended_session.session_channel_id and ended_session.session_message_id:
-                try:
-                    channel = ctx.guild.get_channel(ended_session.session_channel_id)
-                    if channel and isinstance(channel, discord.TextChannel):
-                        try:
-                            message = await channel.fetch_message(ended_session.session_message_id)
-                            embed = await self._create_session_embed(ctx.guild.id, ended_session)
-                            await message.edit(embed=embed)
-                        except discord.NotFound:
-                            logger.warning(f"Session message {ended_session.session_message_id} not found")
-                        except Exception as e:
-                            logger.error(f"Error updating session message: {e}")
-                except Exception as e:
-                    logger.error(f"Error getting session channel: {e}")
-            
-            # Create and send session summary
-            summary_embed = await self._create_session_summary_embed(ctx.guild.id, ended_session)
-            
-            # Try to send to session channel, fallback to current channel
-            if ended_session.session_channel_id:
-                try:
-                    summary_channel = ctx.guild.get_channel(ended_session.session_channel_id)
-                    if summary_channel and isinstance(summary_channel, discord.TextChannel):
-                        await summary_channel.send(embed=summary_embed)
-                except Exception as e:
-                    logger.error(f"Error sending summary to session channel: {e}")
-                    await ctx.send(embed=summary_embed)
-            else:
-                await ctx.send(embed=summary_embed)
-            
-            # Send confirmation
-            embed = await self.branding_service.success_embed(
+            # Show confirmation dialog
+            embed = await self.branding_service.create_embed(
                 ctx.guild.id,
-                title="Session Ended",
-                description=f"Session ended. Duration: {ended_session.duration_str}"
+                title="End Session?",
+                description=f"Are you sure you want to end the session?\nCurrent duration: {session.duration_str}"
             )
-            await ctx.send(embed=embed)
             
-            logger.info(f"Session {ended_session.id} ended by {ctx.author.id} in guild {ctx.guild.id}")
+            view = SessionEndConfirmView(
+                guild_id=ctx.guild.id,
+                session_id=session.id,
+                session_service=self.session_service,
+                branding_service=self.branding_service,
+                author=ctx.author,
+                embed_callback=self._create_session_embed
+            )
+            
+            await ctx.send(embed=embed, view=view)
+            
+            logger.info(f"Session end confirmation shown to {ctx.author.id}")
             
         except Exception as e:
-            logger.error(f"Error ending session: {e}")
+            logger.error(f"Error showing session end confirmation: {e}")
             embed = await self.branding_service.error_embed(
                 ctx.guild.id,
                 title="Session Error",

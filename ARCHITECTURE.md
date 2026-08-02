@@ -368,20 +368,40 @@ Persist changes
 Statistics available for queries
 ```
 
-### Audit Logging Flow
+### Persistent View Flow
 
 ```
-Session Event (EventService)
+Bot Startup
     ↓
-AuditService Event Listener
+Restore Active Sessions
     ↓
-Create audit log entry
+Get session_channel_id and session_message_id
     ↓
-Store event metadata (JSON)
+Fetch Discord messages
     ↓
-Persist to database
+Recreate SessionControlsView
     ↓
-Audit trail complete
+Edit message with restored view
+    ↓
+Register with PersistentViewManager
+    ↓
+Views functional after restart
+```
+
+### Button Interaction Flow
+
+```
+User clicks button
+    ↓
+SessionControlsView button handler
+    ↓
+Permission check (if needed)
+    ↓
+Call SessionService method
+    ↓
+Update session embed via view
+    ↓
+Send ephemeral response
 ```
 
 ### Boost Flow

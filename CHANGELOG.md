@@ -5,7 +5,123 @@ All notable changes to SessionCore will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.0] - 2026-07-30
+## [1.4.0] - 2026-08-01
+
+### Added
+- Interactive Session UI with persistent Discord Views
+- SessionControlsView with Vote, Boost, Refresh, and Info buttons
+- BoostModal for optional boost note input
+- SessionEndConfirmView for session termination confirmation
+- PersistentViewManager for centralized view management
+- Automatic view restoration on bot restart
+- Button interactions with immediate embed updates
+- Ephemeral responses for better UX
+- Session info display as ephemeral embed
+- Confirmation dialogs prevent accidental session termination
+- Views survive bot restart and gateway reconnect
+- Session controls operate on active session only
+- Embed callback support for flexible embed creation
+
+### Changed
+- Session embeds now include interactive controls
+- Session end command now shows confirmation dialog
+- Vote and boost can be done via buttons instead of commands
+- Refresh button forces immediate embed update
+- Info button shows session details as ephemeral embed
+- Views automatically restored for active sessions on startup
+- No duplicate session messages (in-place editing only)
+
+### Fixed
+- Views continue functioning after bot restart
+- Buttons properly update session embeds
+- Modals submit correctly with optional notes
+- Session updates immediately on button interactions
+- Confirmation dialogs prevent accidental session termination
+- Expired views handled gracefully
+- Deleted messages handled gracefully
+- Missing permissions handled gracefully
+
+### Security
+- All users can vote and boost via buttons
+- Refresh and info available to all users
+- Session end confirmation requires command invoker only
+- Buttons respect existing permission framework
+- Ephemeral responses for better privacy
+
+### Architecture
+- PersistentViewManager for centralized view management
+- SessionControlsView with timeout=None for persistence
+- Automatic view restoration on bot startup
+- Event-driven button interactions
+- No duplicate logic - all through SessionService
+- Future-proof design for additional buttons
+
+### Future Compatibility
+- Easy to add Lock Session button
+- Easy to add Pause Session button
+- Easy to add API Actions buttons
+- Easy to add Announcements button
+- Easy to add Polls button
+- Modular button system for future extensions
+
+## [Unreleased]
+
+### Added
+- Interactive Session UI with persistent Discord Views
+- SessionControlsView with Vote, Boost, Refresh, and Info buttons
+- BoostModal for optional boost note input
+- SessionEndConfirmView for session termination confirmation
+- PersistentViewManager for centralized view management
+- Automatic view restoration on bot restart
+- Button interactions with immediate embed updates
+- Ephemeral responses for better UX
+- Session info display as ephemeral embed
+- Confirmation dialogs prevent accidental session termination
+- Views survive bot restart and gateway reconnect
+- Session controls operate on active session only
+- Embed callback support for flexible embed creation
+
+### Changed
+- Session embeds now include interactive controls
+- Session end command now shows confirmation dialog
+- Vote and boost can be done via buttons instead of commands
+- Refresh button forces immediate embed update
+- Info button shows session details as ephemeral embed
+- Views automatically restored for active sessions on startup
+- No duplicate session messages (in-place editing only)
+
+### Fixed
+- Views continue functioning after bot restart
+- Buttons properly update session embeds
+- Modals submit correctly with optional notes
+- Session updates immediately on button interactions
+- Confirmation dialogs prevent accidental session termination
+- Expired views handled gracefully
+- Deleted messages handled gracefully
+- Missing permissions handled gracefully
+
+### Security
+- All users can vote and boost via buttons
+- Refresh and info available to all users
+- Session end confirmation requires command invoker only
+- Buttons respect existing permission framework
+- Ephemeral responses for better privacy
+
+### Architecture
+- PersistentViewManager for centralized view management
+- SessionControlsView with timeout=None for persistence
+- Automatic view restoration on bot startup
+- Event-driven button interactions
+- No duplicate logic - all through SessionService
+- Future-proof design for additional buttons
+
+### Future Compatibility
+- Easy to add Lock Session button
+- Easy to add Pause Session button
+- Easy to add API Actions buttons
+- Easy to add Announcements button
+- Easy to add Polls button
+- Modular button system for future extensions
 
 ### Added
 - ServiceContainer: Lightweight dependency injection container for all services
